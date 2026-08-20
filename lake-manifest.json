@@ -28,5 +28,5 @@
    "inputRev": "main",
    "inherited": true,
    "configFile": "lakefile.toml"}],
- "name": "StrataRRL",
+ "name": "StrataRelRL",
  "lakeDir": ".lake"}

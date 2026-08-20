@@ -1,5 +1,5 @@
 /-
-  Copyright RRL Contributors
+  Copyright StrataRelRL Contributors
 
   SPDX-License-Identifier: Apache-2.0 OR MIT
 -/

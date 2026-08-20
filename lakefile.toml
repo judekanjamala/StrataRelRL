@@ -1,4 +1,4 @@
-name = "StrataRRL"
+name = "StrataRelRL"
 version = "0.1.0"
 defaultTargets = ["RRL"]
 
@@ -29,4 +29,4 @@ globs = ["RRL.Examples.+"]
 # dependency above) directly.
 [[lean_exe]]
 name = "rrl"
-root = "RRLMain"
+root = "Main"
