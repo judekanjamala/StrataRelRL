@@ -1,0 +1,32 @@
+name = "StrataRRL"
+version = "0.1.0"
+defaultTargets = ["RRL"]
+
+[leanOptions]
+warningAsError = true
+
+# RRL is a relational dialect over Strata Core, ported from the RelRL
+# project. Per the Strata repository-split philosophy (see
+# docs/verso/IRTranslationPhilosophyDoc.lean, "Relation to the proposed
+# repository split", issue #1168), a dialect + translation-to-Core such as
+# this one lives in its own package and depends on the main `Strata`
+# package; `Strata` does not depend on it.
+[[require]]
+name = "Strata"
+path = "../Strata"
+
+[[lean_lib]]
+name = "RRL"
+globs = ["RRL", "RRL.DDMTransform.+", "RRL.Verify", "RRL.Cli"]
+
+[[lean_lib]]
+name = "RRLExamples"
+globs = ["RRL.Examples.+"]
+
+# Standalone `rrl` executable, self-contained within this package: no
+# dependency on the separate Strata-CLI repo. `rrl rrlVerify <file>` and
+# `rrl rrlToCore <file>` reuse `Strata.Cli.Framework` (from the `Strata`
+# dependency above) directly.
+[[lean_exe]]
+name = "rrl"
+root = "RRLMain"
