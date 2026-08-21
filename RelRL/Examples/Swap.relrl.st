@@ -1,4 +1,4 @@
-program RRL;
+program RelRL;
 //
 // Ported from RelRL's `examples/all_all/swap/prog.rl`.
 //
@@ -18,7 +18,7 @@ program RRL;
 // i.e. writing to `a` then `b` is observationally equivalent to writing to
 // `b` then `a`, since the two writes commute (they touch disjoint fields).
 //
-// Our RRL dialect does not yet support classes, methods, or relational
+// Our RelRL dialect does not yet support classes, methods, or relational
 // pre/postconditions (`Agree`, `bimodule`) -- only a single top-level
 // `biembed (left | right)` pairing two ordinary Core command blocks. So
 // this is ported down to the essence of the example: plain `a`/`b`
@@ -27,7 +27,13 @@ program RRL;
 // postcondition that the commuting writes still reach the same final
 // state. A real relational postcondition (`a_left == a_right`) would
 // require the bicommand-level assertions this dialect doesn't support yet.
-//
+//  Note the trailing `;` after each `{ ... }` side (each side is a full Core
+// `Command`, i.e. `command_block`, whose own grammar rule is `b ";\n"`), and
+// *no* trailing `;` after the closing `)` (`command_bicommand`'s rule is
+// just `b`, with no separator of its own).
+
+
+
 ( {
     var a : int := 0;
     var b : int := 0;

@@ -1,11 +1,11 @@
 name = "StrataRelRL"
 version = "0.1.0"
-defaultTargets = ["RRL"]
+defaultTargets = ["RelRL"]
 
 [leanOptions]
 warningAsError = true
 
-# RRL is a relational dialect over Strata Core, ported from the RelRL
+# RelRL is a relational dialect over Strata Core, ported from the RelRL
 # project. Per the Strata repository-split philosophy (see
 # docs/verso/IRTranslationPhilosophyDoc.lean, "Relation to the proposed
 # repository split", issue #1168), a dialect + translation-to-Core such as
@@ -16,17 +16,17 @@ name = "Strata"
 path = "../Strata"
 
 [[lean_lib]]
-name = "RRL"
-globs = ["RRL", "RRL.DDMTransform.+", "RRL.Verify", "RRL.Cli"]
+name = "RelRL"
+globs = ["RelRL", "RelRL.DDMTransform.+", "RelRL.Verify", "RelRL.Cli"]
 
 [[lean_lib]]
-name = "RRLExamples"
-globs = ["RRL.Examples.+"]
+name = "RelRLExamples"
+globs = ["RelRL.Examples.+"]
 
-# Standalone `rrl` executable, self-contained within this package: no
-# dependency on the separate Strata-CLI repo. `rrl rrlVerify <file>` and
-# `rrl rrlToCore <file>` reuse `Strata.Cli.Framework` (from the `Strata`
+# Standalone `relrl` executable, self-contained within this package: no
+# dependency on the separate Strata-CLI repo. `relrl relrlVerify <file>` and
+# `relrl relrlToCore <file>` reuse `Strata.Cli.Framework` (from the `Strata`
 # dependency above) directly.
 [[lean_exe]]
-name = "rrl"
+name = "relrl"
 root = "Main"

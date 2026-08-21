@@ -6,20 +6,20 @@
 
 module
 
-public import RRL.DDMTransform.Grammar
+public import RelRL.DDMTransform.Grammar
 public import Strata.Languages.Core.Verifier
 public import Strata.DL.Imperative.MetaData
 public import Strata.Pipeline.Messages
 import StrataDDM.AST
 
 namespace Strata
-namespace RRL
+namespace RelRL
 
 public section
 
 open StrataDDM (Operation Arg QualifiedIdent)
 
-/-! # RRL → Core translation
+/-! # RelRL → Core translation
 
 `biembed left right` lowers to a single Core statement block containing two
 labeled sub-blocks, `left` followed by `right`, executed as one sequential
@@ -28,8 +28,8 @@ aliasing), matching the RelRl-inspired design of this dialect discussed
 during development (no shared heap/state is introduced between the two
 sides).
 
-Every other top-level `Command` in an RRL program is ordinary Core syntax
-(the RRL grammar only *extends* Core's `Command` category with
+Every other top-level `Command` in an RelRL program is ordinary Core syntax
+(the RelRL grammar only *extends* Core's `Command` category with
 `command_bicommand`), so it is translated by delegating straight to Core's
 own DDM translator (`Core.getProgram`), reusing exactly the same
 battle-tested per-statement/per-declaration translation Core itself uses
@@ -97,7 +97,7 @@ partial def lowerBicommand (op : Operation) (ictx : Lean.Parser.InputContext) :
     return .block "biembed" [] {}
 
 /-- Lower a single `Command`-typed argument: either a nested bicommand
-(`RRL.command_bicommand`, itself wrapping `biembed` or a future relational
+(`RelRL.command_bicommand`, itself wrapping `biembed` or a future relational
 operator) or ordinary Core syntax. -/
 partial def lowerCommandArg (label : String) (arg : Arg) (ictx : Lean.Parser.InputContext) :
     TranslateM Core.Statement := do
@@ -109,7 +109,7 @@ partial def lowerCommandArg (label : String) (arg : Arg) (ictx : Lean.Parser.Inp
 
 partial def lowerCommandOp (label : String) (op : Operation) (ictx : Lean.Parser.InputContext) :
     TranslateM Core.Statement := do
-  if op.name == q`RRL.command_bicommand then
+  if op.name == q`RelRL.command_bicommand then
     match op.args with
     | #[.op bicommandOp] => lowerBicommand bicommandOp ictx
     | _ =>
@@ -122,7 +122,7 @@ partial def lowerCommandOp (label : String) (op : Operation) (ictx : Lean.Parser
 
 end
 
-/-- Translate a whole RRL program to Core: each top-level `RRL.command_bicommand`
+/-- Translate a whole RelRL program to Core: each top-level `RelRL.command_bicommand`
 becomes a nameless Core procedure whose body is the lowered `biembed` block;
 every other top-level command is ordinary Core syntax, translated unchanged
 via `Core.getProgram`. -/
@@ -130,7 +130,7 @@ def translateProgram (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext := Inhabited.default) : TranslateM Core.Program := do
   let mut decls : List Core.Decl := []
   for op in p.commands do
-    if op.name == q`RRL.command_bicommand then
+    if op.name == q`RelRL.command_bicommand then
       match op.args with
       | #[.op bicommandOp] =>
         let stmt ← lowerBicommand bicommandOp ictx
@@ -147,5 +147,5 @@ def translateProgram (p : StrataDDM.Program)
   return { decls := decls }
 
 end
-end RRL
+end RelRL
 end Strata

@@ -16,12 +16,11 @@ public section
 namespace Strata
 
 #dialect
-dialect RRL;
+dialect RelRL;
 import Core;
 
 category Bicommand;
 op biembed (left : Command, right : Command) : Bicommand => "(" left " | " right ")";
-op command_bicommand (b : Bicommand) : Command => b;
 
 #end
 
