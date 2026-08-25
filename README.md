@@ -3,9 +3,7 @@
 An experimental [Strata](https://github.com/strata-org/Strata) dialect that
 adds **bicommands** — paired left/right program fragments — on top of Strata
 Core, and verifies them by lowering to Core and reusing Core's existing
-SMT-backed verification pipeline unchanged.
-
-The dialect is called `RelRL`, after *relational region logic*. It ports ideas
+SMT-backed verification pipeline unchanged. It ports
 from **WhyRel** — the original OCaml implementation which lives at
 [dnaumann/RelRL](https://github.com/dnaumann/RelRL) based on Why3 onto Strata,
 starting with the forall-forall (2-safety) fragment described in
@@ -16,59 +14,68 @@ the underlying relational region logic is from
 
 ## Current State
 
-Early but genuinely end-to-end: you can write a `.relrl.st` file and get
-per-obligation pass/fail with source locations.
-
 **Works today**
 
-- `.relrl.st` concrete syntax, parsed by DDM from the `#dialect RelRL` declaration
+- `.relrl.st` concrete syntax, parsed by DDM from the `#dialect RelRL`
+  declaration: `birelate <name> = ( { …left… } | { …right… } );`
+- **Variable agreement postconditions.** An optional `ensures` clause relates
+  the two sides:
+
+  ```
+  birelate swap = ( { … } | { … } ) ensures
+    [agree_a]: left_a == right_a,
+    [agree_b]: left_b == right_b;
+  ```
+
+  Each side's locals are renamed `left_<v>` / `right_<v>` and the sides are
+  flattened into one scope — ordinary self-composition — so the agreement is
+  an ordinary Core `assert` after both sides have run.
 - `StrataDDM.Program` → `Core.Program` translation, with source positions preserved
 - SMT-backed verification via Core's unmodified pipeline
-- A standalone `relrl` CLI (`relrlVerify`, `relrlToCore`) with no `Strata-CLI` dependency
+- A standalone `relrl` CLI (`verify`, `toCore`) with no `Strata-CLI` dependency
 
 **Not yet**
 
-- **Relational specifications.** There are no `Agree` pre/post-conditions or
-  `bimodule`-style specs. The two sides are verified *independently*, so a
-  goal like `a_left == a_right` cannot be stated. This is the main gap
-  versus RelRL and the next thing worth building.
-- **Objects, classes, methods, modules.** Each side is plain Core commands.
+- **Relational specifications beyond variable agreement.** An `ensures` spec
+  relates two *identifiers*; `left_a == right_a + 1` does not parse. This is
+  forced by DDM's phase structure, not chosen — see `docs/issues.md`. There are
+  also no relational *pre*conditions and no `bimodule`-style specs.
+- **Yet to add Biif and Biwhile and Bisync** `biembed` is the only one.
+- **Yet to add Objects, classes, methods, modules.** Each side is plain Core commands.
   There is no heap model — deliberately, since the forall-forall examples
   being targeted first don't need one.
-- **A second bicommand operator.** `biembed` is the only one; nesting is
-  plumbed through the translator but unexercised.
-- **Tests.** The example is exercised by running the CLI by hand.
 
-The whole dialect is currently three declarations:
 
-```
-dialect RelRL;
-import Core;
+## Usage
 
-category Bicommand;
-op biembed (left : Command, right : Command) : Bicommand => "(" left " | " right ")";
-op command_bicommand (b : Bicommand) : Command => b;
-```
+Requires an SMT solver on `PATH` (cvc5 by default).
 
-## Quick start
-
-Requires a sibling `Strata` checkout at `../Strata` (a path dependency) with
-a matching `lean-toolchain`, and an SMT solver on `PATH` (cvc5 by default).
+`Main.lean` + `RelRL/Cli.lean` define a self-contained `lean_exe` built on the
+shared `Strata.Cli.Framework` from the `Strata` dependency, so no
+`Strata-CLI` checkout is involved.
 
 ```console
-$ lake build relrl
-$ ./.lake/build/bin/relrl relrlVerify RelRL/Examples/Swap.relrl.st
-Swap.relrl.st(36, 4) [left_a_then_b]: ✅ pass
-Swap.relrl.st(37, 4) [left_a_then_b]: ✅ pass
-Swap.relrl.st(43, 4) [right_b_then_a]: ✅ pass
-Swap.relrl.st(44, 4) [right_b_then_a]: ✅ pass
-All 4 goals passed.
+$ lake exe relrl verify RelRL/Examples/Swap.relrl.st
+Swap.relrl.st(14, 4) [left_a_then_b]: ✅ pass
+Swap.relrl.st(15, 4) [left_a_then_b]: ✅ pass
+Swap.relrl.st(21, 4) [right_b_then_a]: ✅ pass
+Swap.relrl.st(22, 4) [right_b_then_a]: ✅ pass
+Swap.relrl.st(25, 2) [agree_a]: ✅ pass
+Swap.relrl.st(26, 2) [agree_b]: ✅ pass
+All 6 goals passed.
 ```
+`verify` accepts the same `--check-mode`/`--solver`/`--vc-directory`/etc. flags
+as the generic `strata verify` command (`Strata.Cli.VerifyOptions`), and uses
+the same exit-code scheme (0 = success, 2 = failures found, 3 = internal error).
+A translation diagnostic also exits 3: the Core program verified would not be
+the program written, so a clean obligation count must not read as success.
 
-`relrl relrlToCore <file>` prints the translated Core program instead, so it can
-be verified with any generic Core tool. `relrl --help` lists both commands and
-their flags (`--check-mode`, `--solver`, `--vc-directory`, …, shared with
-`strata verify`).
+`relrl toCore <file>` prints the translated Core program instead, so it can
+be verified with any generic Core tool. 
+
+`relrl --help` lists both commands and their flags (`--check-mode`, `--solver`,
+`--vc-directory`, …, shared with `strata verify`). (currently the help and error
+text names `strata` rather than `relrl`. Fix is upstream)
 
 ## Layout
 
@@ -77,14 +84,13 @@ their flags (`--check-mode`, `--solver`, `--vc-directory`, …, shared with
 | `RelRL/DDMTransform/Grammar.lean` | the `#dialect RelRL … #end` declaration |
 | `RelRL/DDMTransform/Translate.lean` | `StrataDDM.Program` → `Core.Program` |
 | `RelRL/Verify.lean` | translate, then `Strata.Core.verifyProgram` |
-| `RelRL/Cli.lean` | `relrlVerify` / `relrlToCore` command definitions |
+| `RelRL/Cli.lean` | `verify` / `toCore` command definitions |
 | `Main.lean` | standalone `relrl` executable |
-| `RelRL/Examples/Swap.relrl.st` | ported from [RelRL `examples/all_all/swap`](https://github.com/dnaumann/RelRL/tree/main/examples/all_all/swap) |
+| `RelRL/Examples` | Dialect examples |
 
-`WORKFLOW.md` documents the full pipeline step by step, along with the design
-decisions behind it (why lower to Core rather than to Imperative+Lambda, why
-the translator hand-walks the DDM AST instead of using generated `ofAst`, and
-why left and right are separate state spaces).
+[`docs/workflow.md`](docs/workflow.md) documents the full pipeline step by step,
+[`docs/design.md`](docs/design.md) records the design decisions behind the
+dialect, and [`docs/issues.md`](docs/issues.md) records known defects.
 
 ## License
 

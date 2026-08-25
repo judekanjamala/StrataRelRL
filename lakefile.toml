@@ -5,15 +5,10 @@ defaultTargets = ["RelRL"]
 [leanOptions]
 warningAsError = true
 
-# RelRL is a relational dialect over Strata Core, ported from the RelRL
-# project. Per the Strata repository-split philosophy (see
-# docs/verso/IRTranslationPhilosophyDoc.lean, "Relation to the proposed
-# repository split", issue #1168), a dialect + translation-to-Core such as
-# this one lives in its own package and depends on the main `Strata`
-# package; `Strata` does not depend on it.
 [[require]]
 name = "Strata"
-path = "../Strata"
+git = "https://github.com/strata-org/Strata.git"
+rev = "main"
 
 [[lean_lib]]
 name = "RelRL"
@@ -24,9 +19,15 @@ name = "RelRLExamples"
 globs = ["RelRL.Examples.+"]
 
 # Standalone `relrl` executable, self-contained within this package: no
-# dependency on the separate Strata-CLI repo. `relrl relrlVerify <file>` and
-# `relrl relrlToCore <file>` reuse `Strata.Cli.Framework` (from the `Strata`
+# dependency on the separate Strata-CLI repo. `relrl verify <file>` and
+# `relrl toCore <file>` reuse `Strata.Cli.Framework` (from the `Strata`
 # dependency above) directly.
 [[lean_exe]]
 name = "relrl"
 root = "Main"
+
+# Grammar/translation tests. Built by `lake build RelRLTest`; `#guard_msgs`
+# failures are Lean errors, so a regression fails the build.
+[[lean_lib]]
+name = "RelRLTest"
+globs = ["RelRLTest.+"]

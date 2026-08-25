@@ -25,10 +25,10 @@ command line, both reusing the unified `strata` CLI's framework
 (`Strata.Cli.Framework`) the same way `StrataPython.Cli` and the built-in
 `Core`/`Laurel` commands do:
 
-- `relrlVerify <file>`: parse, translate, and verify an RelRL `.relrl.st` file in
+- `verify <file>`: parse, translate, and verify an RelRL `.relrl.st` file in
   one step, printing one pass/fail line per proof obligation (mirroring the
   generic `verify` command's output and exit-code scheme).
-- `relrlToCore <file>`: translate an RelRL `.relrl.st` file to Core concrete
+- `toCore <file>`: translate an RelRL `.relrl.st` file to Core concrete
   syntax and print it to stdout. The output is a normal `.core.st` file, so
   it can be saved and verified with the *generic* `strata verify` command
   (`Core.verify`/`Core.verifyProgram`) without any RelRL-specific tooling —
@@ -60,8 +60,8 @@ def readRelRLProgram (fm : StrataDDM.DialectFileMap) (file : String) :
   | .program pgm => pure (pgm, inputCtx)
   | .dialect _ => throw (IO.userError s!"Expected an RelRL program file, got a dialect: {file}")
 
-def relrlToCoreCommand : Command where
-  name := "relrlToCore"
+def toCoreCommand : Command where
+  name := "toCore"
   args := [ "file" ]
   flags := [includeFlag]
   help := "Translate an RelRL bicommand source file to Core and print it to stdout. \
@@ -76,12 +76,12 @@ def relrlToCoreCommand : Command where
       IO.eprintln s!"{Message.format d (some ictx.fileMap)}"
     IO.println (StrataDDM.Program.toString (Strata.coreToStrataProgram coreProgram))
 
-def relrlVerifyCommand : Command where
-  name := "relrlVerify"
+def verifyCommand : Command where
+  name := "verify"
   args := [ "file" ]
   flags := includeFlag :: verifyOptionsFlags
   help := "Translate and verify an RelRL bicommand source file (.relrl.st) directly, \
-    without a separate relrlToCore + verify step."
+    without a separate toCore + verify step."
   callback := fun v pflags => do
     let file := v[0]
     let opts ← parseVerifyOptions pflags { _root_.Core.VerifyOptions.default with verbose := .quiet }
@@ -98,6 +98,14 @@ def relrlVerifyCommand : Command where
     for vcResult in vcResults do
       let posStr := Imperative.MetaData.formatFileRangeD vcResult.obligation.metadata (some ictx.fileMap)
       println! f!"{posStr} [{vcResult.obligation.label}]: {vcResult.formatOutcome}"
+    -- A translation diagnostic means the Core program we verified is not the
+    -- program the user wrote, so it must fail the run even if every obligation
+    -- discharged. Without this a lowering bug can report success on a program
+    -- that silently lost statements.
+    if !diagnostics.isEmpty then
+      println! f!"Finished with {vcResults.size} goals checked, \
+        but {diagnostics.size} translation error(s) occurred."
+      IO.Process.exit ExitCode.internalError
     let success := vcResults.all _root_.Core.VCResult.isSuccess
     if success then
       println! f!"All {vcResults.size} goals passed."

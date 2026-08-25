@@ -13,7 +13,7 @@ CLI's commands without requiring RelRL to depend on the separate
 `Strata-CLI` package. -/
 def commandGroups : List CommandGroup := [
   { name := "RelRL"
-    commands := [Strata.RelRL.Cli.relrlToCoreCommand, Strata.RelRL.Cli.relrlVerifyCommand]
+    commands := [Strata.RelRL.Cli.toCoreCommand, Strata.RelRL.Cli.verifyCommand]
     commonFlags := [] },
 ]
 
@@ -23,5 +23,7 @@ def commandList : List Command :=
 def commandMap : Std.HashMap String Command :=
   commandList.foldl (init := {}) fun m c => m.insert c.name c
 
+-- Note: the framework's help and error output hardcodes the program name
+-- `strata`, so `relrl --help` misnames this binary. See docs/issues.md.
 def main (args : List String) : IO Unit :=
   runCommandMap commandMap commandGroups args

@@ -1,4 +1,4 @@
-/- 
+/-
   Copyright StrataRelRL Contributors
 
   SPDX-License-Identifier: Apache-2.0 OR MIT
@@ -27,7 +27,13 @@ the way `Strata.Core.verifyProgram` verifies any other Core program: this
 reuses Core's existing tempDir/vcDirectory handling, SMT discharge, and
 `VCResults` reporting unchanged. Translation-time diagnostics from the RelRL
 lowering (see `RelRL.DDMTransform.Translate`) are returned alongside the
-`VCResults` so callers can report both in one place. -/
+`VCResults` so callers can report both in one place.
+
+Note: bare `Core` is ambiguous inside this package, because `Strata.Core` also
+names the generated `StrataDDM.Dialect` value for the Core dialect and shadows
+the `Core` *namespace*. Hence the `_root_.Core.` prefixes on `VerifyOptions`,
+`VCResult`, etc.
+-/
 def verify (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := Inhabited.default)
     (options : _root_.Core.VerifyOptions := .default) :
     IO (_root_.Core.VCResults × Array Message) := do
