@@ -21,15 +21,12 @@ open StrataDDM (Operation Arg QualifiedIdent)
 
 /-! # RelRL to Core translation
 
-`birelate name = (left | right);` lowers to a Core procedure named `name` whose
-body is a single statement block containing two labeled sub-blocks, `left`
-followed by `right`, executed as one sequential Core program: left and right
-remain separate namespaces (Core scoping, not aliasing), so no shared heap or
-state is introduced between the two sides.
-
-Core's own DDM translator (`Core.getProgram`), reusing exactly the same
-battle-tested per-statement/per-declaration translation Core itself uses instead
-of re-implementing it. -/
+`biproc name = << left | right >> ensures …;` becomes a Core procedure `name`.
+Left-side top-level locals keep their names, right-side ones are primed
+(`<v>'`), and the sides are concatenated — self-composition — so an `ensures`
+agreement is an ordinary Core `assert` after both have run. Per-declaration
+translation is delegated to Core's own `Core.getProgram` rather than
+reimplemented. See `docs/workflow.md`. -/
 
 structure TranslateState where
   diagnostics : Array Message := #[]
@@ -40,101 +37,90 @@ def TranslateM.run (m : TranslateM α) : α × Array Message :=
   let (v, s) := StateT.run m {}
   (v, s.diagnostics)
 
-def emitDiagnostic (d : Message) : TranslateM Unit :=
+def emit_diagnostic (d : Message) : TranslateM Unit :=
   modify fun s => { s with diagnostics := s.diagnostics.push d }
 
-/-- Translate an ordinary Core-syntax top-level operation (a function,
-procedure, type declaration, or bare block) by delegating to Core's own DDM
-translator. The operation is wrapped in a singleton Core program so that
-`Core.getProgram` can be reused unchanged. -/
-def translateCoreOp (op : Operation) (ictx : Lean.Parser.InputContext) :
+/-- Report a broken translator invariant. `Grammar.lean` fixes every argument
+shape matched below, so the fallback branches are unreachable through the
+parser; if one fires the grammar and translator have drifted, which is a bug
+here rather than in the user's program. `.strataBug` makes it exit 3. -/
+def emit_invariant_violation (msg : String) : TranslateM Unit :=
+  emit_diagnostic (Message.fromString s!"translator invariant violated: {msg}" .strataBug)
+
+/-- Translate one ordinary Core top-level operation by wrapping it in a
+singleton Core program and delegating to `Core.getProgram`. -/
+def translate_core_op (op : Operation) (ictx : Lean.Parser.InputContext) :
     TranslateM (List Core.Decl) := do
   let singleton := StrataDDM.Program.create Core_map "Core" #[op]
   let (coreProgram, errors) := Core.getProgram singleton ictx
   for e in errors do
-    emitDiagnostic (Message.fromString e .strataBug)
+    emit_diagnostic (Message.fromString e .strataBug)
   return coreProgram.decls
 
-/-- Undo the `Core.command_block` wrap applied in `lowerBlockArg`. Core
-translates such a command to a single nameless, parameterless procedure whose
-body is the block's statements, so peel that procedure off and return the
-statements for embedding in the combined `biembed` block. `label` (`left` or
-`right`) is used only in diagnostics. -/
-def unwrapBlockProcedure (label : String) (decls : List Core.Decl) :
+/-- Undo the `Core.command_block` wrap from `lower_block_arg`: Core turns such a
+command into a nameless procedure, so peel it back to a statement list. -/
+def unwrap_block_procedure (label : String) (decls : List Core.Decl) :
     TranslateM (List Core.Statement) := do
   match decls with
   | [.proc proc _md] =>
     match proc.body with
     | .structured ss => return ss
     | .cfg _ =>
-      emitDiagnostic (Message.fromString
-        s!"biembed {label} side must be structured Core syntax, not a CFG block")
+      emit_invariant_violation s!"biembed {label} side lowered to a CFG block"
       return []
   | _ =>
-    emitDiagnostic (Message.fromString
-      s!"biembed {label} side must be a single Core statement block")
+    emit_invariant_violation
+      s!"biembed {label} side lowered to {decls.length} decls, expected one procedure"
     return []
 
-/-- Prefix every variable a side declares, so the two sides can be flattened
-into one scope without colliding — and so a relational spec can name them.
-`substFvar` rewrites reads, `renameLhs` rewrites declaration and assignment
-targets; together they are a full rename.
-
-Only the side's *top-level* declarations are renamed. A declaration nested in
-an `if` or `while` body stays block-scoped, so it can neither collide across
-sides nor be named by a spec. -/
-def prefixSideVars (pfx : String) (stmts : List Core.Statement) : List Core.Statement :=
+/-- Prime a side's top-level declarations so the two sides can be flattened
+without colliding, and so an `ensures` spec can name them. The left side is
+translated with `sfx = ""` (unprimed, so it keeps the source names) and the
+right with `sfx = "'"`. `substFvar` rewrites reads, `renameLhs` rewrites
+targets. Declarations nested in an `if`/`while` body stay block-scoped, so they
+neither collide nor can be named. -/
+def suffix_side_vars (sfx : String) (stmts : List Core.Statement) : List Core.Statement :=
+  if sfx.isEmpty then stmts else
   let declared := stmts.filterMap fun
     | .init lhs _ _ _ => some lhs.name
     | _ => none
   declared.foldl (init := stmts) fun ss v =>
-    let v' : Core.CoreIdent := ⟨pfx ++ v, ()⟩
+    let v' : Core.CoreIdent := ⟨v ++ sfx, ()⟩
     Core.Block.renameLhs (Core.Block.substFvar ss ⟨v, ()⟩ (.fvar () v' none)) ⟨v, ()⟩ v'
 
-/-- Lower one side of a `biembed` to its statements, with every top-level
-declaration prefixed by `label ++ "_"`. The argument is a Core `Block`
-operation; wrapping it in `Core.command_block` turns it into the top-level
-`Command` that `Core.getProgram` knows how to translate, so Core's own block
-handling is reused verbatim. -/
-def lowerBlockArg (label : String) (arg : Arg) (ictx : Lean.Parser.InputContext) :
+/-- Lower one side to renamed statements: `label` names the side in diagnostics,
+`sfx` is the suffix its top-level locals take. The argument is a Core `Block`,
+so it is wrapped in a synthetic `Core.command_block` to become a top-level
+`Command` that `Core.getProgram` accepts. -/
+def lower_block_arg (label sfx : String) (arg : Arg) (ictx : Lean.Parser.InputContext) :
     TranslateM (List Core.Statement) := do
   match arg with
   | .op blockOp =>
     let asCommand : Operation :=
       { ann := blockOp.ann, name := q`Core.command_block, args := #[.op blockOp] }
-    let decls ← translateCoreOp asCommand ictx
-    let stmts ← unwrapBlockProcedure label decls
-    return prefixSideVars s!"{label}_" stmts
+    let decls ← translate_core_op asCommand ictx
+    let stmts ← unwrap_block_procedure label decls
+    return suffix_side_vars sfx stmts
   | _ =>
-    emitDiagnostic (Message.fromString s!"biembed {label} side must be a block")
+    emit_invariant_violation s!"biembed {label} side is not an operation"
     return []
 
-/-- Lower a `biembed` operation's two `Block`-typed arguments (`left`, `right`)
-to one flat statement list: the left side's statements followed by the right
-side's, each side's locals renamed `left_<v>` / `right_<v>`.
-
-The sides are flattened rather than nested in `left:` / `right:` blocks so that
-a relational spec can refer to both sides at once — block-scoped variables are
-invisible once the block closes. Renaming keeps them disjoint, which makes this
-ordinary self-composition, sound for the forall-forall fragment.
-
-Not recursive: a `Bicommand` cannot occur inside either side (see the module
-docstring). -/
-def lowerBicommand (op : Operation) (ictx : Lean.Parser.InputContext) :
+/-- Lower `biembed left right` to one flat statement list. Flattened rather than
+nested because a Core block's locals are invisible once it closes, and an
+`ensures` spec must name both sides. Not recursive: `Bicommand` cannot occur
+inside a side. -/
+def lower_bicommand (op : Operation) (ictx : Lean.Parser.InputContext) :
     TranslateM (List Core.Statement) := do
   match op.args with
   | #[left, right] =>
-    let leftStmts ← lowerBlockArg "left" left ictx
-    let rightStmts ← lowerBlockArg "right" right ictx
-    return leftStmts ++ rightStmts
+    return (← lower_block_arg "left" "" left ictx) ++ (← lower_block_arg "right" "'" right ictx)
   | _ =>
-    emitDiagnostic (Message.fromString "biembed expects exactly two blocks (left, right)")
+    emit_invariant_violation "biembed does not have exactly two arguments"
     return []
 
-/-- Lower one `RelRL.rel_agree` — `[l]: x == y` — to a Core `assert`. Both
-operands are identifiers by construction (see `Grammar.lean`), so the equality
-is built directly rather than routed through Core's expression translator. -/
-def lowerRelAgree (arg : Arg) (ictx : Lean.Parser.InputContext) :
+/-- Lower one `rel_agree` — `[l]: x == y` — to a Core `assert`. Both operands are
+identifiers by construction, so the equality is built directly. -/
+def lower_rel_agree (arg : Arg) (ictx : Lean.Parser.InputContext) :
     TranslateM (List Core.Statement) := do
   match arg with
   | .op specOp =>
@@ -145,57 +131,54 @@ def lowerRelAgree (arg : Arg) (ictx : Lean.Parser.InputContext) :
       let r : Core.Expression.Expr := .fvar () ⟨rhs, ()⟩ none
       return [.assert label (.eq () l r) md]
     | _ =>
-      emitDiagnostic (Message.fromString "malformed relational spec")
+      emit_invariant_violation "rel_agree does not have exactly three identifiers"
       return []
   | _ =>
-    emitDiagnostic (Message.fromString "malformed relational spec")
+    emit_invariant_violation "rel_agree spec is not an operation"
     return []
 
-/-- Lower a `birelate`'s optional `ensures` clause to a list of Core asserts,
-appended after both sides have run. An absent clause yields no statements. -/
-def lowerRelEnsures (arg : Arg) (ictx : Lean.Parser.InputContext) :
+/-- Lower the optional `ensures` clause to asserts appended after both sides. -/
+def lower_rel_ensures (arg : Arg) (ictx : Lean.Parser.InputContext) :
     TranslateM (List Core.Statement) := do
   match arg with
   | .option _ none => return []
   | .option _ (some (.op ensuresOp)) =>
     match ensuresOp.args with
     | #[.seq _ _ specs] =>
-      let mut stmts : List Core.Statement := []
+      -- Reversed accumulator, flipped once: `stmts ++ …` per iteration is O(n²).
+      let mut acc : List (List Core.Statement) := []
       for spec in specs do
-        stmts := stmts ++ (← lowerRelAgree spec ictx)
-      return stmts
+        acc := (← lower_rel_agree spec ictx) :: acc
+      return acc.reverse.flatten
     | _ =>
-      emitDiagnostic (Message.fromString "malformed ensures clause")
+      emit_invariant_violation "rel_ensures does not hold a comma-separated sequence"
       return []
   | _ =>
-    emitDiagnostic (Message.fromString "malformed ensures clause")
+    emit_invariant_violation "biproc's rel argument is not an Option"
     return []
 
-/-- Translate a whole RelRL program to Core: each top-level `RelRL.birelate`
-becomes a Core procedure of the same name whose body is the lowered `biembed`
-block; every other top-level command is ordinary Core syntax, translated
-unchanged via `Core.getProgram`. -/
-def translateProgram (p : StrataDDM.Program)
+/-- Each `RelRL.biproc` becomes a Core procedure of the same name; every other
+top-level command is ordinary Core syntax, delegated unchanged. -/
+def translate_program (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext := Inhabited.default) : TranslateM Core.Program := do
-  let mut decls : List Core.Decl := []
+  let mut acc : List (List Core.Decl) := []
   for op in p.commands do
-    if op.name == q`RelRL.birelate then
+    if op.name == q`RelRL.biproc then
       match op.args with
       | #[.ident _ name, .op bicommandOp, relArg] =>
-        let sideStmts ← lowerBicommand bicommandOp ictx
-        let relStmts ← lowerRelEnsures relArg ictx
+        let sideStmts ← lower_bicommand bicommandOp ictx
+        let relStmts ← lower_rel_ensures relArg ictx
         let md := Imperative.MetaData.ofSourceRange (.file ictx.fileName) op.ann
         let body : Core.Statement := .block "biembed" (sideStmts ++ relStmts) md
-        decls := decls ++ [.proc
+        acc := [.proc
           { header := { name := name, typeArgs := [], inputs := [], outputs := [] },
             spec := { preconditions := [], postconditions := [] },
-            body := .structured [body] } md]
+            body := .structured [body] } md] :: acc
       | _ =>
-        emitDiagnostic (Message.fromString "malformed birelate declaration")
+        emit_invariant_violation "biproc does not have exactly three arguments"
     else
-      let subDecls ← translateCoreOp op ictx
-      decls := decls ++ subDecls
-  return { decls := decls }
+      acc := (← translate_core_op op ictx) :: acc
+  return { decls := acc.reverse.flatten }
 
 end
 end RelRL

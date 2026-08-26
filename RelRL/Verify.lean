@@ -16,35 +16,24 @@ namespace RelRL
 
 public section
 
--- `Core` alone is ambiguous here: `Strata.Core` also names the generated
--- `StrataDDM.Dialect` value for the Core dialect (declared by `#dialect
--- ... #end` in `Strata.Languages.Core.DDMTransform.Grammar`), which shadows
--- the `Core` *namespace* holding `Core.Program`, `Core.VCResult`, etc. Use
--- fully-qualified names throughout to avoid the ambiguity.
+-- `Core` alone is ambiguous here: `Strata.Core` names the generated
+-- `StrataDDM.Dialect` value and shadows the `Core` *namespace* holding
+-- `Core.Program`, `Core.VCResult`. Hence the `_root_.Core.` prefixes below.
 
-/-- Translate `p` (an RelRL `StrataDDM.Program`) to Core, then verify it exactly
-the way `Strata.Core.verifyProgram` verifies any other Core program: this
-reuses Core's existing tempDir/vcDirectory handling, SMT discharge, and
-`VCResults` reporting unchanged. Translation-time diagnostics from the RelRL
-lowering (see `RelRL.DDMTransform.Translate`) are returned alongside the
-`VCResults` so callers can report both in one place.
-
-Note: bare `Core` is ambiguous inside this package, because `Strata.Core` also
-names the generated `StrataDDM.Dialect` value for the Core dialect and shadows
-the `Core` *namespace*. Hence the `_root_.Core.` prefixes on `VerifyOptions`,
-`VCResult`, etc.
--/
+/-- Translate `p` to Core, then verify it via `Strata.Core.verifyProgram` —
+Core's tempDir/vcDirectory handling, SMT discharge and `VCResults` reporting,
+unchanged. Translation diagnostics come back alongside the results. -/
 def verify (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := Inhabited.default)
     (options : _root_.Core.VerifyOptions := .default) :
     IO (_root_.Core.VCResults × Array Message) := do
-  let (coreProgram, diagnostics) := TranslateM.run (translateProgram p ictx)
+  let (coreProgram, diagnostics) := TranslateM.run (translate_program p ictx)
   let vcResults ← EIO.toIO (fun m => IO.Error.userError m)
     (Strata.Core.verifyProgram coreProgram options)
   return (vcResults, diagnostics)
 
 /-- Convenience wrapper returning only formatted `Message`s (translation
 diagnostics plus one message per proof obligation), for CLI-style reporting. -/
-def verifyToMessages (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := Inhabited.default)
+def verify_to_messages (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := Inhabited.default)
     (options : _root_.Core.VerifyOptions := .default) : IO (Array Message) := do
   let (vcResults, diagnostics) ← verify p ictx options
   let vcMessages := vcResults.map fun vcr =>

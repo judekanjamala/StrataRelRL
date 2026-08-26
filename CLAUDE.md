@@ -40,15 +40,15 @@ In `RelRL/DDMTransform/Grammar.lean`, `biembed`'s two sides are Core `Block`,
 **not** `Command`, and `Bicommand` is not a `Command`:
 
 ```
-op birelate (name : Ident, body : Bicommand) : Command => "birelate " name " = " body ";";
-op biembed  (left : Block, right : Block) : Bicommand  => "(" left " | " right ")";
+op biproc (name : Ident, body : Bicommand, rel : Option RelEnsures) : Command =>
+  "biproc " name " = " body rel ";";
+op biembed (left : Block, right : Block) : Bicommand => "<<" left " | " right ">>";
 ```
 
-This is what makes bicommand nesting structurally impossible: no Core
-`Statement`/`Block` operator takes a `Command`, so a `Bicommand` cannot recur
-through its own sides. Making the sides `Command`, or adding
+No Core `Statement`/`Block` operator takes a `Command`, so a `Bicommand` cannot
+recur through its own sides. Making the sides `Command`, or adding
 `op inj (b : Bicommand) : Command => b`, reintroduces nesting immediately —
-`( ( a | b ) | c )` starts parsing. `docs/design.md` has the full argument.
+`<< << a | b >> | c >>` starts parsing. `docs/design.md` has the argument.
 
 ## Reading the dependency
 

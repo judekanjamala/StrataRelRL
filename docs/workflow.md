@@ -8,7 +8,7 @@ against `Strata` upstream `main`.
 
 `RelRL/DDMTransform/Grammar.lean` declares the dialect with `#dialect … #end`. 
 
-`buildRelRLDialectFileMap` preloads the `Core` and `RelRL` dialect constants
+`build_relrl_dialect_file_map` preloads the `Core` and `RelRL` dialect constants
 (plus the DDM builtins) into the `DialectFileMap`, so `.relrl.st` files parse
 without any `--include` search path; `--include` is still accepted for extra
 dialects.
@@ -26,7 +26,7 @@ an ordinary compiled constant, `Strata.RelRL : StrataDDM.Dialect`, into
 shadowing documented in `RelRL/Verify.lean` comes from — `Strata.Core` names
 both a `Dialect` *value* and the namespace holding `Core.Program`.)
 
-That constant is statically linked into `relrl`, and `buildRelRLDialectFileMap`
+That constant is statically linked into `relrl`, and `build_relrl_dialect_file_map`
 hands it to the parser as data:
 
 ```lean
@@ -53,34 +53,36 @@ the `DialectFileMap` for lazy loading on first reference
 it, since its own dialect is compiled in and so is always found first.
 
 Consequently the grammar is re-parsed only by `lake build`, after an edit to
-`Grammar.lean` — which is what makes the `#strata` blocks in `RelRLTest/` valid
-grammar tests: they exercise the same compiled `Dialect`, at the moment it is
+`Grammar.lean`. A `#strata … #end` block in a Lean file is therefore a real
+grammar test: it exercises the same compiled `Dialect`, at the moment it is
 produced.
 
 ## 2. `StrataDDM.Program` → `Core.Program` (`RelRL.DDMTransform.Translate`)
 
 `RelRL/DDMTransform/Translate.lean` 
 
-- `translateProgram` walks each top-level `Operation` in `p.commands`. A
-  `RelRL.birelate` becomes a Core procedure *of the same name*, whose body is
+- `translate_program` walks each top-level `Operation` in `p.commands`. A
+  `RelRL.biproc` becomes a Core procedure *of the same name*, whose body is
   the lowered `biembed`; everything else is ordinary embedded Core syntax,
   delegated straight to Core's own `Core.getProgram`.
-- `lowerBicommand` lowers `biembed left right` to one *flat* statement list:
+- `lower_bicommand` lowers `biembed left right` to one *flat* statement list:
   the left side's statements followed by the right side's, all inside a single
   `Statement.block "biembed" … md`.
-- `lowerBlockArg` handles one side. The argument is a Core `Block`, so it is
+- `lower_block_arg` handles one side. The argument is a Core `Block`, so it is
   wrapped in a synthetic `Core.command_block` operation to become the
   top-level `Command` that `Core.getProgram` accepts, then passed to
-  `translateCoreOp` (which wraps it in a singleton `StrataDDM.Program`).
-  `unwrapBlockProcedure` then undoes that wrap, peeling off the nameless
+  `translate_core_op` (which wraps it in a singleton `StrataDDM.Program`).
+  `unwrap_block_procedure` then undoes that wrap, peeling off the nameless
   procedure Core produces to leave a plain statement list.
-- `prefixSideVars` renames each side's top-level declarations to `left_<v>` /
-  `right_<v>`, using Core's own `Block.substFvar` (reads) and
-  `Block.renameLhs` (declaration and assignment targets).
-- `lowerRelEnsures` turns the optional `ensures` clause into Core `assert`s
+- `suffix_side_vars` renames each side's top-level declarations under the prime
+  convention: the left side keeps its source names, the right side's become
+  `<v>'`. It uses Core's own `Block.substFvar` (reads) and `Block.renameLhs`
+  (declaration and assignment targets).
+- `lower_rel_ensures` turns the optional `ensures` clause into Core `assert`s
   appended after both sides.
 - Translation runs in `TranslateM` (a `StateM` over an `Array Message`), so
-  malformed bicommands produce diagnostics rather than panics.
+  broken invariants produce diagnostics rather than panics, and source positions
+  survive via `Imperative.MetaData.ofSourceRange`.
 
 ### Why the sides are flattened rather than nested
 
@@ -94,8 +96,6 @@ renaming neither side can observe the other.
 Only *top-level* declarations of a side are renamed. One nested inside an `if`
 or `while` body stays block-scoped, so it can neither collide across sides nor
 be named by a spec.
-- Source positions are preserved via `Imperative.MetaData.ofSourceRange`,
-  so verifier diagnostics trace back to the original RelRL source span.
 
 The result is an ordinary `Core.Program`. Everything downstream is exactly
 Core's pipeline, unmodified.
@@ -114,6 +114,6 @@ def verify (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := ..)
 
 `Strata.Core.verifyProgram` runs Core's
 existing VC-generation and SMT-discharge pipeline unmodified.
-`verifyToMessages` is a convenience wrapper that formats both the
+`verify_to_messages` is a convenience wrapper that formats both the
 translation diagnostics and one `Message` per proof obligation.
 

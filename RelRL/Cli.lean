@@ -20,24 +20,18 @@ namespace Strata.RelRL.Cli
 
 /-! # RelRL CLI command definitions
 
-Two ways to drive verification of an RelRL bicommand program from the
-command line, both reusing the unified `strata` CLI's framework
-(`Strata.Cli.Framework`) the same way `StrataPython.Cli` and the built-in
-`Core`/`Laurel` commands do:
+Both commands reuse `Strata.Cli.Framework`, as the built-in `Core`/`Laurel`
+commands do.
 
-- `verify <file>`: parse, translate, and verify an RelRL `.relrl.st` file in
-  one step, printing one pass/fail line per proof obligation (mirroring the
-  generic `verify` command's output and exit-code scheme).
-- `toCore <file>`: translate an RelRL `.relrl.st` file to Core concrete
-  syntax and print it to stdout. The output is a normal `.core.st` file, so
-  it can be saved and verified with the *generic* `strata verify` command
-  (`Core.verify`/`Core.verifyProgram`) without any RelRL-specific tooling —
-  i.e., RelRL→Core translation and Core verification are decoupled, just like
-  `laurelToCore` decouples Laurel translation from Core verification. -/
+- `verify <file>`: parse, translate and verify in one step, one pass/fail line
+  per obligation.
+- `toCore <file>`: translate and print Core concrete syntax, so translation and
+  verification stay decoupled — the output is a normal `.core.st` file for any
+  generic Core tool. Mirrors how `laurelToCore` splits Laurel. -/
 
-/-- Preload the `Core` and `RelRL` dialects (plus DDM builtins) so that
-`.relrl.st` files can be parsed without a separate `--include` search path. -/
-def buildRelRLDialectFileMap (pflags : ParsedFlags) : IO StrataDDM.DialectFileMap := do
+/-- Preload `Core` and `RelRL` (plus DDM builtins) so `.relrl.st` files parse
+without an `--include` search path. -/
+def build_relrl_dialect_file_map (pflags : ParsedFlags) : IO StrataDDM.DialectFileMap := do
   let preloaded := StrataDDM.Elab.LoadedDialects.builtin
     |>.addDialect! Strata.Core
     |>.addDialect! Strata.RelRL
@@ -48,10 +42,9 @@ def buildRelRLDialectFileMap (pflags : ParsedFlags) : IO StrataDDM.DialectFileMa
     | .ok fm' => fm := fm'
   return fm
 
-/-- Read and parse an RelRL program file via the DDM API, the same way the
-unified `strata` binary's `readStrataProgram` helper reads any other
-dialect's file. -/
-def readRelRLProgram (fm : StrataDDM.DialectFileMap) (file : String) :
+/-- Read and parse a program file via the DDM API, as the `strata` binary's
+`readStrataProgram` does for any dialect. -/
+def read_relrl_program (fm : StrataDDM.DialectFileMap) (file : String) :
     IO (StrataDDM.Program × Lean.Parser.InputContext) := do
   let text ← StrataDDM.Util.readInputSource file
   let displayPath := StrataDDM.Util.displayName file
@@ -60,23 +53,22 @@ def readRelRLProgram (fm : StrataDDM.DialectFileMap) (file : String) :
   | .program pgm => pure (pgm, inputCtx)
   | .dialect _ => throw (IO.userError s!"Expected an RelRL program file, got a dialect: {file}")
 
-def toCoreCommand : Command where
+def to_core_command : Command where
   name := "toCore"
   args := [ "file" ]
   flags := [includeFlag]
   help := "Translate an RelRL bicommand source file to Core and print it to stdout. \
-    The output is ordinary Core concrete syntax: save it to a `.core.st` file \
-    and drive its verification with `strata verify` directly."
+    Save the output as a `.core.st` file to verify it with `strata verify`."
   callback := fun v pflags => do
-    let fm ← buildRelRLDialectFileMap pflags
-    let (pgm, ictx) ← readRelRLProgram fm v[0]
+    let fm ← build_relrl_dialect_file_map pflags
+    let (pgm, ictx) ← read_relrl_program fm v[0]
     let (coreProgram, diagnostics) :=
-      Strata.RelRL.TranslateM.run (Strata.RelRL.translateProgram pgm ictx)
+      Strata.RelRL.TranslateM.run (Strata.RelRL.translate_program pgm ictx)
     for d in diagnostics do
       IO.eprintln s!"{Message.format d (some ictx.fileMap)}"
     IO.println (StrataDDM.Program.toString (Strata.coreToStrataProgram coreProgram))
 
-def verifyCommand : Command where
+def verify_command : Command where
   name := "verify"
   args := [ "file" ]
   flags := includeFlag :: verifyOptionsFlags
@@ -86,8 +78,8 @@ def verifyCommand : Command where
     let file := v[0]
     let opts ← parseVerifyOptions pflags { _root_.Core.VerifyOptions.default with verbose := .quiet }
       (inputFile := some file)
-    let fm ← buildRelRLDialectFileMap pflags
-    let (pgm, ictx) ← readRelRLProgram fm file
+    let fm ← build_relrl_dialect_file_map pflags
+    let (pgm, ictx) ← read_relrl_program fm file
     let (vcResults, diagnostics) ← try
       Strata.RelRL.verify pgm ictx opts
     catch e =>
@@ -98,10 +90,8 @@ def verifyCommand : Command where
     for vcResult in vcResults do
       let posStr := Imperative.MetaData.formatFileRangeD vcResult.obligation.metadata (some ictx.fileMap)
       println! f!"{posStr} [{vcResult.obligation.label}]: {vcResult.formatOutcome}"
-    -- A translation diagnostic means the Core program we verified is not the
-    -- program the user wrote, so it must fail the run even if every obligation
-    -- discharged. Without this a lowering bug can report success on a program
-    -- that silently lost statements.
+    -- A diagnostic means the program verified is not the program written, so
+    -- it fails the run even when every obligation discharged.
     if !diagnostics.isEmpty then
       println! f!"Finished with {vcResults.size} goals checked, \
         but {diagnostics.size} translation error(s) occurred."

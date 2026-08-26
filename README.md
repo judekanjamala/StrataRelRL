@@ -11,41 +11,6 @@ starting with the forall-forall (2-safety) fragment described in
 the underlying relational region logic is from
 [Banerjee et al.](https://dl.acm.org/doi/10.1145/3551497).
 
-
-## Current State
-
-**Works today**
-
-- `.relrl.st` concrete syntax, parsed by DDM from the `#dialect RelRL`
-  declaration: `birelate <name> = ( { …left… } | { …right… } );`
-- **Variable agreement postconditions.** An optional `ensures` clause relates
-  the two sides:
-
-  ```
-  birelate swap = ( { … } | { … } ) ensures
-    [agree_a]: left_a == right_a,
-    [agree_b]: left_b == right_b;
-  ```
-
-  Each side's locals are renamed `left_<v>` / `right_<v>` and the sides are
-  flattened into one scope — ordinary self-composition — so the agreement is
-  an ordinary Core `assert` after both sides have run.
-- `StrataDDM.Program` → `Core.Program` translation, with source positions preserved
-- SMT-backed verification via Core's unmodified pipeline
-- A standalone `relrl` CLI (`verify`, `toCore`) with no `Strata-CLI` dependency
-
-**Not yet**
-
-- **Relational specifications beyond variable agreement.** An `ensures` spec
-  relates two *identifiers*; `left_a == right_a + 1` does not parse. This is
-  forced by DDM's phase structure, not chosen — see `docs/issues.md`. There are
-  also no relational *pre*conditions and no `bimodule`-style specs.
-- **Yet to add Biif and Biwhile and Bisync** `biembed` is the only one.
-- **Yet to add Objects, classes, methods, modules.** Each side is plain Core commands.
-  There is no heap model — deliberately, since the forall-forall examples
-  being targeted first don't need one.
-
-
 ## Usage
 
 Requires an SMT solver on `PATH` (cvc5 by default).
@@ -88,6 +53,7 @@ text names `strata` rather than `relrl`. Fix is upstream)
 | `Main.lean` | standalone `relrl` executable |
 | `RelRL/Examples` | Dialect examples |
 
+[`docs/status.md`](docs/status.md) records what works today and what does not,
 [`docs/workflow.md`](docs/workflow.md) documents the full pipeline step by step,
 [`docs/design.md`](docs/design.md) records the design decisions behind the
 dialect, and [`docs/issues.md`](docs/issues.md) records known defects.

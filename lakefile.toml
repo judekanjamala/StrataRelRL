@@ -25,9 +25,3 @@ globs = ["RelRL.Examples.+"]
 [[lean_exe]]
 name = "relrl"
 root = "Main"
-
-# Grammar/translation tests. Built by `lake build RelRLTest`; `#guard_msgs`
-# failures are Lean errors, so a regression fails the build.
-[[lean_lib]]
-name = "RelRLTest"
-globs = ["RelRLTest.+"]

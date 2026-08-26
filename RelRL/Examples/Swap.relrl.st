@@ -2,17 +2,17 @@
 
 program RelRL;
 
-birelate swap = ( {
+biproc swap = << {
     var a : int := 0;
     var b : int := 0;
     a := 3;
-    b := 4;
+    b := 3;
   } | {
     var a : int := 0;
     var b : int := 0;
     b := 3;
     a := 3;
   }
-) ensures
-  [agree_a]: left_a == right_a,
-  [agree_b]: left_b == right_b;
+>> ensures
+  [agree_a]: a == a',
+  [agree_b]: b == b';

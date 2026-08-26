@@ -11,19 +11,19 @@ dialect, independent of the unified `strata` binary (`Strata-CLI`). Reuses
 help text, and exit codes, matching the conventions of the main `strata`
 CLI's commands without requiring RelRL to depend on the separate
 `Strata-CLI` package. -/
-def commandGroups : List CommandGroup := [
+def command_groups : List CommandGroup := [
   { name := "RelRL"
-    commands := [Strata.RelRL.Cli.toCoreCommand, Strata.RelRL.Cli.verifyCommand]
+    commands := [Strata.RelRL.Cli.to_core_command, Strata.RelRL.Cli.verify_command]
     commonFlags := [] },
 ]
 
-def commandList : List Command :=
-  commandGroups.foldl (init := []) fun acc g => acc ++ g.commands
+def command_list : List Command :=
+  command_groups.foldl (init := []) fun acc g => acc ++ g.commands
 
-def commandMap : Std.HashMap String Command :=
-  commandList.foldl (init := {}) fun m c => m.insert c.name c
+def command_map : Std.HashMap String Command :=
+  command_list.foldl (init := {}) fun m c => m.insert c.name c
 
 -- Note: the framework's help and error output hardcodes the program name
 -- `strata`, so `relrl --help` misnames this binary. See docs/issues.md.
 def main (args : List String) : IO Unit :=
-  runCommandMap commandMap commandGroups args
+  runCommandMap command_map command_groups args
