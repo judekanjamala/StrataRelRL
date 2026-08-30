@@ -1,20 +1,68 @@
 # StrataRelRL
 
+> **Scope.** How to work in this repo: the commands, the traps, the invariants
+> to protect, and where each kind of prose belongs. Not a reference — the docs
+> below are, and each states its own scope.
+
 A Strata dialect adding **bicommands** on top of Strata Core, verified by
-lowering to Core. `README.md` covers intent, current state, and the file layout;
-`docs/workflow.md` the pipeline; `docs/design.md` the decisions and why they went
-that way; `docs/issues.md` known defects.
+lowering to Core. `README.md` covers intent and the file layout;
+`docs/status.md` what works and how the dialect differs from WhyRel;
+`docs/workflows/` one file per workflow plus the pipeline they share;
+`docs/design.md` the decisions and why they went that way; `docs/issues.md`
+known defects, each traced to its root cause.
 
 ## Commands
 
 ```console
 lake build relrl
-lake exe relrl verify RelRL/Examples/Swap.relrl.st   # smoke test: expect 4/4 goals passed
-lake exe relrl toCore RelRL/Examples/Swap.relrl.st   # print the translated Core program
+lake exe relrl verify RelRL/Examples/Assertions.relrl.st  # smoke test: expect 12/12 passed
+lake exe relrl verify RelRL/Examples/SeqBi.relrl.st       # expect 4/4 passed
+lake exe relrl verify RelRL/Examples/Swap.relrl.st        # expect 2/2 passed
+lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 2/2 passed
+lake exe relrl toCore RelRL/Examples/Swap.relrl.st        # print the translated Core program
+lake exe relrl project RelRL/Examples/Swap.relrl.st --side left   # one side alone, as Core
 ```
 
 `lake exe` resolves and rebuilds; prefer it over `./.lake/build/bin/relrl`.
 Verification needs an SMT solver on `PATH` (cvc5 by default).
+
+## Comments: one fact, one place
+
+The intro above says which file owns which kind of prose. Respect it when
+writing comments:
+
+| Kind | Home |
+|---|---|
+| What works, and how it differs from WhyRel | `docs/status.md` |
+| Why a decision went the way it did | `docs/design.md` |
+| What bites when editing | this file |
+| How a stage works, end to end | `docs/workflows/` |
+| A defect, and what fixing it takes | `docs/issues.md` |
+
+Every doc opens with a **Scope** note repeating its half of this table. Read it
+before adding to that file, and if what you are writing does not fit, put it
+where it belongs and leave a pointer.
+
+A gap against WhyRel is a `status.md` entry, not an issue. When the cause is a
+Strata or translation constraint that cannot be fixed, `status.md` names it and
+points at the `issues.md` section that explains it.
+
+- **Code comments say *what*; they point for *why*.** A docstring restating an
+  argument from `docs/design.md` goes stale independently of it. Two lines and a
+  pointer beat a paragraph.
+- **Never explain the same fact twice** — not across two files, not in a module
+  docstring and again on the function. Put it where the table says and leave a
+  pointer everywhere else.
+- **Don't narrate the code.** Say what an argument means or why a step is
+  needed, not what the next three lines do.
+- **Example headers are ~3 lines**: what the file demonstrates, plus where the
+  reasoning lives. `RelRL/Examples/Assertions.relrl.st` is the exception — its
+  per-form annotations are the content.
+- **Do comment the non-obvious mechanics**, which are what a reader cannot
+  recover from the code: why a sequence is re-tagged `.newline`, why `ens` is
+  declared after `body`. Everything else, delete.
+- When a fact moves, grep for it. Delimiters, op names and expected goal counts
+  have all been restated in four places at once here.
 
 ## Things that will bite
 
@@ -34,21 +82,46 @@ Verification needs an SMT solver on `PATH` (cvc5 by default).
 - **Inside `#dialect … #end`, comments are `//`, not `--`.** A `--` comment
   yields `expected token` at that line with no hint about why.
 
+- **A multi-character delimiter must not start with `_`.** DDM's lexer takes
+  `_` as an identifier start (`StrataDDM/Parser.lean:122`), so it reads `_` and
+  stops — `_|` can never be a token, which is why the synchronized bicommand
+  closes with `-|` rather than WhyRel's `_|`. The opener `|_` would have been
+  fine; only the closer is unreachable.
+
+- **Don't let a delimiter glue onto `;`.** An atom written `" };"` registers
+  `};` as a *single* token, which then swallows the `}` `;` of any other
+  construct. Write `" } ;"`, `">> ;"`, `"-| ;"`. The failure reads
+  `unexpected token '};'; expected '}'` at a line that looks fine. `");"` was
+  the worst case while the split bicommand used parentheses — it swallowed the
+  `)` `;` ending every Core call statement.
+
 ## The invariant worth protecting
 
-In `RelRL/DDMTransform/Grammar.lean`, `biembed`'s two sides are Core `Block`,
-**not** `Command`, and `Bicommand` is not a `Command`:
+In `RelRL/DDMTransform/Grammar.lean`, a bicommand's sides are sequences of Core
+`Statement`, **not** `Command`, and `Bicommand` is not a `Command`:
 
 ```
-op biproc (name : Ident, body : Bicommand, rel : Option RelEnsures) : Command =>
-  "biproc " name " = " body rel ";";
-op biembed (left : Block, right : Block) : Bicommand => "<<" left " | " right ">>";
+op biproc (name : Ident, reqs : Seq RelRequires, body : Seq Bicommand,
+           @[scope(body)] ens : Seq RelEnsures) : Command =>
+  "biproc " name reqs ens " =\n  " indent(2, body);
+op bi_embed (left : NewlineSepBy Statement, right : NewlineSepBy Statement) : Bicommand =>
+  "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>> ;";
 ```
 
 No Core `Statement`/`Block` operator takes a `Command`, so a `Bicommand` cannot
 recur through its own sides. Making the sides `Command`, or adding
 `op inj (b : Bicommand) : Command => b`, reintroduces nesting immediately —
 `<< << a | b >> | c >>` starts parsing. `docs/design.md` has the argument.
+
+## The other invariant: scope chain and binding threading must agree
+
+`@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
+bicommand, and `@[scope(body)]` on `rel` is what puts those bi-locals in scope
+for `ensures`. `Translate.lean` mirrors that chain by hand when it threads
+Core's `TransBindings` from one side to the next. If the two drift, a de Bruijn
+index resolves against the wrong binding list and Core aborts with
+`translateExpr out-of-range bound variable` — not a type error, and not at the
+line you changed. Change one, change the other.
 
 ## Reading the dependency
 

@@ -19,9 +19,8 @@ name = "RelRLExamples"
 globs = ["RelRL.Examples.+"]
 
 # Standalone `relrl` executable, self-contained within this package: no
-# dependency on the separate Strata-CLI repo. `relrl verify <file>` and
-# `relrl toCore <file>` reuse `Strata.Cli.Framework` (from the `Strata`
-# dependency above) directly.
+# dependency on the separate Strata-CLI repo. `verify`, `toCore` and `project`
+# reuse `Strata.Cli.Framework` (from the `Strata` dependency above) directly.
 [[lean_exe]]
 name = "relrl"
 root = "Main"

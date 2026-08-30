@@ -13,7 +13,8 @@ CLI's commands without requiring RelRL to depend on the separate
 `Strata-CLI` package. -/
 def command_groups : List CommandGroup := [
   { name := "RelRL"
-    commands := [Strata.RelRL.Cli.to_core_command, Strata.RelRL.Cli.verify_command]
+    commands := [Strata.RelRL.Cli.to_core_command, Strata.RelRL.Cli.project_command,
+                 Strata.RelRL.Cli.verify_command]
     commonFlags := [] },
 ]
 
