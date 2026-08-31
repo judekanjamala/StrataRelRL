@@ -11,7 +11,7 @@ Parse, translate by self-composition, and discharge every proof obligation in
 one step. Prints one line per obligation, then a summary. Needs an SMT solver on
 `PATH` (cvc5 by default).
 
-Defined at `verify_command` in `RelRL/Cli.lean`; the translation and
+Defined at `verify_command` in `RelRL/Cli/Verify.lean`; the translation and
 verification stages themselves are [`pipeline.md`](pipeline.md) §2 and §3.
 
 ## Stages

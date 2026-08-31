@@ -39,7 +39,7 @@ holding `Core.Program`, which is why the CLI writes `_root_.Core.VerifyOptions`.
 ## How the dialect reaches the parser
 
 The compiled constant is statically linked into `relrl`, and
-`build_relrl_dialect_file_map` (`RelRL/Cli.lean`) hands it to the parser as
+`build_relrl_dialect_file_map` (`RelRL/Cli/Common.lean`) hands it to the parser as
 data:
 
 ```lean
@@ -66,7 +66,7 @@ it, since its own dialect is compiled in and so is always found first.
 
 | Target | Kind | Contents |
 |---|---|---|
-| `RelRL` | `lean_lib` | `RelRL`, `RelRL.DDMTransform.+`, `RelRL.Verify`, `RelRL.Cli` — the default target |
+| `RelRL` | `lean_lib` | `RelRL`, `RelRL.DDMTransform.+`, `RelRL.Verify`, `RelRL.Cli`, `RelRL.Cli.+` — the default target |
 | `RelRLExamples` | `lean_lib` | globs `RelRL.Examples.+` |
 | `relrl` | `lean_exe` | root `Main`, the standalone CLI |
 

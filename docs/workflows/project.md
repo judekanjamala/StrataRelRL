@@ -11,7 +11,7 @@ Print the Core concrete syntax of **one side** of every `biproc` — the unary
 program that side denotes on its own, with neither the other side nor the
 relational `ensures`. No solver is involved.
 
-Defined at `project_command` in `RelRL/Cli.lean`, over the `.project side` case
+Defined at `project_command` in `RelRL/Cli/Project.lean`, over the `.project side` case
 of `translate_program_with`.
 
 ## Why it exists

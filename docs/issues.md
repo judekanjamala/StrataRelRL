@@ -10,7 +10,7 @@
 
 `relrl --help`, `relrl <cmd> --help`, and any error path that falls back to the
 framework's *default* hint print `strata` as the program name. Where
-`RelRL/Cli.lean` passes an explicit hint — `project`'s two `--side` errors —
+`RelRL/Cli/Project.lean` passes an explicit hint — its two `--side` errors —
 the name is right, which is the shape of the fix:
 
 ```console

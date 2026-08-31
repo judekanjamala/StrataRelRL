@@ -18,9 +18,10 @@ the underlying relational region logic is from
 
 Requires an SMT solver on `PATH` (cvc5 by default).
 
-`Main.lean` + `RelRL/Cli.lean` define a self-contained `lean_exe` built on the
+`Main.lean` + `RelRL/Cli/` define a self-contained `lean_exe` built on the
 shared `Strata.Cli.Framework` from the `Strata` dependency, so no
-`Strata-CLI` checkout is involved.
+`Strata-CLI` checkout is involved. One module per command, matching
+`docs/workflows/`.
 
 ```console
 $ lake exe relrl verify RelRL/Examples/Assertions.relrl.st
@@ -65,7 +66,11 @@ text names `strata` rather than `relrl`. Fix is upstream)
 | `RelRL/DDMTransform/Grammar.lean` | the `#dialect RelRL … #end` declaration |
 | `RelRL/DDMTransform/Translate.lean` | `StrataDDM.Program` → `Core.Program` |
 | `RelRL/Verify.lean` | translate, then `Strata.Core.verifyProgram` |
-| `RelRL/Cli.lean` | `verify` / `toCore` / `project` command definitions |
+| `RelRL/Cli/Common.lean` | parsing a `.relrl.st` file, diagnostics, exit codes |
+| `RelRL/Cli/Verify.lean` | the `verify` command |
+| `RelRL/Cli/ToCore.lean` | the `toCore` command |
+| `RelRL/Cli/Project.lean` | the `project` command |
+| `RelRL/Cli.lean` | imports the four, so `Main.lean` sees one module |
 | `Main.lean` | standalone `relrl` executable |
 | `RelRL/Examples` | Dialect examples |
 

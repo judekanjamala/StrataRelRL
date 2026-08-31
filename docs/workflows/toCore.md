@@ -12,7 +12,7 @@ solver is involved. This is [`verify`](verify.md) stopped one stage early, and i
 exists so translation and verification stay decoupled: the output is an ordinary
 `.core.st` file for any generic Core tool.
 
-Defined at `to_core_command` in `RelRL/Cli.lean`. Mirrors how the upstream
+Defined at `to_core_command` in `RelRL/Cli/ToCore.lean`. Mirrors how the upstream
 `laurelToCore` command splits Laurel.
 
 ## Stages

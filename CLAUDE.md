@@ -84,7 +84,7 @@ points at the `issues.md` section that explains it.
 
 - **Two `Core` namespaces.** `Strata.Core` (the dialect) and `_root_.Core` (the
   verification IR) both exist and resolve differently depending on the enclosing
-  namespace. `RelRL/Cli.lean` writes `_root_.Core.VerifyOptions`,
+  namespace. `RelRL/Cli/Verify.lean` writes `_root_.Core.VerifyOptions`,
   `_root_.Core.VCResult` for exactly this reason. Wiring RelRL into `Strata-CLI`
   was abandoned over this; see `docs/design.md`.
 

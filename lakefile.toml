@@ -12,7 +12,7 @@ rev = "main"
 
 [[lean_lib]]
 name = "RelRL"
-globs = ["RelRL", "RelRL.DDMTransform.+", "RelRL.Verify", "RelRL.Cli"]
+globs = ["RelRL", "RelRL.DDMTransform.+", "RelRL.Verify", "RelRL.Cli", "RelRL.Cli.+"]
 
 [[lean_lib]]
 name = "RelRLExamples"
