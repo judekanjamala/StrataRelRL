@@ -70,7 +70,7 @@ points at the `issues.md` section that explains it.
 ## Things that will bite
 
 - **A `datatype` or multi-function `rec` block in the same file as a `biproc`
-  is refused**, by `misaligning_command?` in `Translate.lean`. Not a style rule:
+  is refused**, by `misaligning_command?` in `Translate/Program.lean`. Not a style rule:
   the body's references to top-level declarations would otherwise resolve to the
   wrong decl, or to the literal `0`, and verify a false spec. Widen the guard,
   never loosen it, until the upstream fix lands — `docs/issues.md` has both.
@@ -136,7 +136,7 @@ obligation the other raised at an earlier step, and nothing reports it.
 `@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
 bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`, and
 `@[scope(body)]` on `rel` is what puts all of them in scope for `ensures`.
-`Translate.lean` mirrors that chain by hand when it threads Core's
+`Translate/Bicommands.lean` mirrors that chain by hand when it threads Core's
 `TransBindings` from one side to the next. If the two drift, a de Bruijn index
 resolves against the wrong binding list and Core aborts with `translateExpr
 out-of-range bound variable` — not a type error, and not at the line you
