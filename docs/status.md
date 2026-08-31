@@ -161,11 +161,11 @@ whole design rests on. See `docs/design.md`.
   for the forall-forall fragment RelRL targets, so it is omitted rather than
   deferred.
 - **Datatypes and multi-function `rec` blocks alongside a `biproc`.** Rejected
-  with a located error, because the biproc body's references to top-level
-  declarations would silently misresolve — [`issues.md`](issues.md), "A
-  `datatype` silently misresolves every later top-level reference". Either is
-  fine in a file with no `biproc`; so are type synonyms, opaque `type`s and
-  single-function `rec` blocks alongside one.
+  with a located error: the biproc body's references to top-level declarations
+  would resolve against a short binding list — [`issues.md`](issues.md), "A
+  `datatype` breaks the top-level binding list". Either is fine in a file with
+  no `biproc`; so are type synonyms, opaque `type`s and single-function `rec`
+  blocks alongside one.
 - **Formulas.** Quantifiers (`Rquant`), `let` (`Rlet`), named relational
   predicates and coupling relations (`Rprimitive`, `named_rformula`), and
   everything needing a heap: region-image agreement (``Agree e`f``), refperm.
@@ -184,10 +184,10 @@ first do not need one.
   RelRL lowers by self-composition, so the right side really is a set of
   variables named `a'`, and *every* name a right-hand fragment mentions is
   renamed — which is what keeps a one-sided variable from being shared. Two
-  consequences reach the surface language: `Agree x` is lexical and unchecked,
-  and a one-sided name used from the wrong side is reported by Core rather than
-  by the translator — [`issues.md`](issues.md), "`Agree x` is lexical" and "A
-  one-sided name used from the other side is caught only by Core".
+  consequence reaches the surface language: `Agree x` takes an `Ident` rather
+  than an expression, since `x'` is a name lowering invents and DDM has nothing
+  to elaborate it against — `docs/design.md`. The translator checks that operand,
+  and every other name a side mentions, against what that side declared.
 - **A top-level `/\` is split** into one obligation per conjunct, for readable
   verifier output. RelRL's own, not WhyRel's.
 

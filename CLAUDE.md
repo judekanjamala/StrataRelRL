@@ -122,6 +122,15 @@ recur through its own sides. Making the sides `Command`, or adding
 `op inj (b : Bicommand) : Command => b`, reintroduces nesting immediately —
 `<< << a | b >> | c >>` starts parsing. `docs/design.md` has the argument.
 
+## Emission order is per bicommand
+
+`BodyState.emit` appends one bicommand's left statements and then its right
+ones, so `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂`. Do not batch the sides
+into `l₁; l₂; r₁; r₂`, however tempting it looks given that priming makes them
+disjoint. A side may hold a Core `assume`, and batching moves it across the
+other side's statements — a later step of one program can then discharge an
+obligation the other raised at an earlier step, and nothing reports it.
+
 ## The other invariant: scope chain and binding threading must agree
 
 `@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its

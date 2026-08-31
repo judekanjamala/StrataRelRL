@@ -140,10 +140,10 @@ spec talks about.
 
 The sides are not `left:`/`right:` sub-blocks, because a relational formula has
 to name both sides at once and a Core block's locals are invisible once the
-block closes. Priming makes the two sides disjoint, so concatenating them is
-ordinary self-composition — the standard encoding for the forall-forall
-fragment, and sound precisely because after priming neither side can observe the
-other.
+block closes. Priming makes the two sides disjoint, so emitting both into one
+list is the standard encoding for the forall-forall fragment, sound precisely
+because after priming neither side can observe the other. The order is
+per bicommand — each element's left statements, then its right ones.
 
 Every variable a right-hand fragment mentions is primed, at any depth — one
 declared inside an `if` or `while` body included, so the two sides stay disjoint

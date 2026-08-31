@@ -27,13 +27,10 @@ is then an ordinary Core `assert` over both. The prime is what separates the two
 programs in the one Core scope they now share, so it holds for asymmetric names
 too — `Var | u : int ;` declares the right program's `u`, which is `u'` in Core.
 
-**The two are interleaved per bicommand, not concatenated.** `(l₁|r₁); (l₂|r₂)`
-becomes `l₁; r₁; l₂; r₂` — WhyRel's `Bisplit` emits its left then its right and
-`Biseq` composes those, so this follows it. Whole-left-then-whole-right would be
-self-composition in the textbook sense, but it is a *different program*: an
-`assume` in one side would move across the other side's statements, and could
-discharge an obligation the other program raised at an earlier step.
-`docs/design.md` has the case.
+The two are interleaved per bicommand: `(l₁|r₁); (l₂|r₂)` becomes
+`l₁; r₁; l₂; r₂`, following WhyRel, where `Bisplit` emits its left then its
+right and `Biseq` composes those. CLAUDE.md says what breaks if that order is
+changed.
 
 Lowering runs inside Core's `TransM`, threading its `TransBindings` from one
 side to the next. **That threading mirrors the `@[scope(…)]` chain in
@@ -61,7 +58,8 @@ def emit_invariant_violation (msg : String) : TranslateM Unit :=
 
 /-! ## Priming
 
-A right-hand fragment is renamed apart before the two sides are concatenated.
+A right-hand fragment is renamed apart before the two sides are emitted
+together.
 Both helpers fold Core's own substitution, so no traversal is written here.
 
 **What gets primed is every program variable the fragment mentions.** Core has
@@ -298,11 +296,8 @@ def check_formula (declared : List DeclName) (fr : FileRange)
         s!"`{source}` is not a variable of the {side} program" .userError
 
 /-- Emit one bicommand: the left program's statements, then the right's, as
-WhyRel's `Bisplit` does. **Per bicommand, not per side** — `(l₁|r₁); (l₂|r₂)`
-becomes `l₁; r₁; l₂; r₂`, never `l₁; l₂; r₁; r₂`. The two are not
-interchangeable: batching each side lets a *later* step of one program reach an
-*earlier* obligation of the other, since an `assume` in a side moves across the
-other side's statements. `docs/design.md` has the case. -/
+WhyRel's `Bisplit` does. Per bicommand, never per side — CLAUDE.md, "Emission
+order is per bicommand". -/
 def BodyState.emit (s : BodyState) (left right : List Core.Statement) : BodyState :=
   { s with out := s.out ++ left.toArray ++ right.toArray }
 
@@ -723,8 +718,8 @@ def lower_biproc (mode : Mode) (p : StrataDDM.Program)
 
 /-- Commands that add more than one `freeVars` entry per decl they return, and
 so break the index alignment `translate_program_with` depends on. Names what was
-found, for the message. `docs/issues.md`, "A `datatype` silently misresolves
-every later top-level reference" — delete this once that is fixed upstream. -/
+found, for the message. `docs/issues.md`, "A `datatype` breaks the top-level
+binding list" — delete this once that is fixed upstream. -/
 def misaligning_command? (op : Operation) : Option String :=
   match op.name, op.args with
   | q`Core.command_datatypes, _ => some "a `datatype` declaration"
@@ -748,11 +743,12 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
     TransM.run ictx (translateCoreDecls coreProgram {}) p.globalContext
   for e in coreErrors do
     emit_diagnostic (Message.fromString e .strataBug)
-  -- WRONG, and unsound: `translateCoreDecls` returns one decl per *command*,
-  -- but `command_datatypes` and a multi-function `command_recfndefs` add more
-  -- than one `freeVars` entry, so this array is shorter than the index space a
-  -- `.fvar i` in a body is resolved against. `docs/issues.md`, "A `datatype`
-  -- silently misresolves every later top-level reference".
+  -- Holds only while each command contributes exactly one decl.
+  -- `command_datatypes` and a multi-function `command_recfndefs` add more
+  -- `freeVars` entries than that, making this array shorter than the index
+  -- space a `.fvar i` in a body resolves against; `misaligning_command?` below
+  -- refuses those two. `docs/issues.md`, "A `datatype` breaks the top-level
+  -- binding list".
   let top : TransBindings := { freeVars := coreDecls.toArray }
   -- Refuse the combination rather than lower a body against a `top` that is
   -- known to be short: the misresolution is silent, and can verify a false spec.

@@ -73,24 +73,24 @@ Finished with 2 goals passed, 2 failed.
 Each line is one conjunct, at the source position of the clause it came from —
 the `Assert`'s two at line 18, the `ensures`'s two at line 8.
 
-**A name a spec got wrong.** `Agree x` is lexical, so nothing checks it until
-Core does — against the *translated* program, so the position is a character
-range in the Core text rather than a line and column in the source, and the
-assert printed is the lowered form. Exit 3:
+**A name a spec got wrong.** Reported against the clause, exit 1. `Agree x`
+takes an `Ident` rather than an expression, so DDM does not elaborate it
+(`docs/design.md`); the translator checks the operand against what each side
+declared, and says which program is missing it:
 
 ```console
 $ relrl verify bogus.relrl.st        # ensures { Agree zzz }
-bogus.relrl.st(26-47) ❌ Type checking error.
-[assert [ensures_1] (zzz == zzz')] No free variables are allowed here!
-Free Variables: [zzz, zzz']
+bogus.relrl.st(3, (2-23)) `zzz` is not a variable of the left program
+bogus.relrl.st(3, (2-23)) `zzz` is not a variable of the right program
+Finished with 0 goals checked, but 2 error(s) occurred.
 ```
 
-Every other relational form is a real Core expression elaborated in the
-bi-local scope, so a bad name there is caught by DDM at the right source
-position instead. See `docs/issues.md`.
+Every other relational form is a real Core expression elaborated in the scope
+the formula sits in, so DDM catches a bad name there first, at the same source
+position.
 
-**A name declared twice.** Self-composition fuses both programs into one Core
-scope, so a name has to be unique there — under its Core name, which for the
+**A name declared twice.** Both programs land in one Core scope, so a name has
+to be unique there — under its Core name, which for the
 right program carries the prime. The translator checks this itself and reports
 against the declaration, exit 1; verification is skipped, since the Core program
 would not be the one the source denotes:

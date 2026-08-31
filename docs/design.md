@@ -92,6 +92,18 @@ are rejected by the parser:
   bicommand or a spec cannot see either copy. `docs/issues.md` records what
   that costs.
 
+- **`Agree x` takes an `Ident`, not an expression, because `x'` is a name
+  translation invents.** Every other relational form — `Both (e)`, `<| e <]`,
+  `[> e |>`, `l =:= r` — is a Core expression, elaborated by DDM in the scope
+  the formula sits in. `Agree x` cannot be: it names the *pair* `x`/`x'`, and
+  `x'` exists only after lowering, so DDM has nothing to elaborate it against.
+  It emits `x == x'` lexically instead, and the translator checks the operand
+  itself against what each side declared.
+
+  One consequence is convenient: `Agree x` works on a name a *split* declared,
+  not just a bi-local, because a split's right side is primed against its own
+  declarations, so both `x` and `x'` exist in the flattened block.
+
 - **A call inside a bicommand is Core's `call`, and needs nothing new.** The
   sides of a split are Core `Statement`s, and `call f(x, out y);` is one — so
   relating two programs that call the same procedures in different orders works
@@ -168,32 +180,12 @@ are rejected by the parser:
   << b := 3 | a := 3 >> ;` says *which* step lines up with which.
 
   Lowering emits each bicommand's left statements and then its right ones, so
-  `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂`. This is WhyRel's order —
-  `Bisplit` compiles to `Esequence (left, right)` and `Biseq` composes those —
-  and it is *not* interchangeable with batching each side into
-  `l₁; l₂; r₁; r₂`, which is what self-composition means in the textbook sense.
-  Batching is a different program. It is sound while both sides are ordinary
-  statements, since priming leaves them unable to observe each other, but a side
-  may hold a Core `assume`, and an `assume` moved across the other side's
-  statements changes which obligations are vacuous:
+  `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂` — WhyRel's order, where `Bisplit`
+  compiles to `Esequence (left, right)` and `Biseq` composes those. A sequence
+  of two bicommands is therefore not the same Core as one bicommand holding both
+  statements per side; `Swap.relrl.st` writes both, as WhyRel does.
 
-  ```
-  <<  | assert [y]: a == 999; >> ;   // the right program asserts, at step 1
-  <<  assume [x]: false;  | >> ;     // the left program assumes, at step 2
-  ```
-
-  Interleaved, the assert precedes the assume and must be proved — it fails, as
-  it should. Batched, the left's `assume false` would be emitted first and
-  discharge it vacuously. A later step of one program must not be able to reach
-  an earlier obligation of the other, and only the per-bicommand order
-  guarantees that.
-
-  A consequence worth knowing: a sequence of two bicommands is therefore *not*
-  the same Core as one bicommand holding both statements per side. WhyRel's
-  swap example writes both — `m` as `( f | g ); ( g | f );` and `m2` as
-  `( f; g | g; f )` — and they lower differently, as they do there.
-
-  What makes an alignment *observable in the obligations* is still a relational
+  What makes an alignment observable in the obligations is a relational
   assertion between the elements, which sees both sides as they stand at exactly
   that point:
 
@@ -265,9 +257,9 @@ are rejected by the parser:
 - **Relational specs name both sides, and the sides are flattened.** An
   `ensures [l]: a == a'` clause needs to name both sides at once, and Core block
   scoping makes that impossible while the sides are nested in `left:` / `right:`
-  blocks. So translation renames the right side apart and concatenates the
-  sides — self-composition, sound for forall-forall because renaming makes the
-  sides unable to observe each other. That soundness needs the rename to be
+  blocks. So translation renames the right side apart and emits both into one
+  flat list, interleaved per bicommand — sound for forall-forall because
+  renaming makes the sides unable to observe each other. That soundness needs the rename to be
   *total* over the fragment, which is why it is driven by what the fragment
   mentions rather than by a list of expected names; CLAUDE.md's second invariant
   says what happens otherwise. Core supplies the renaming itself
