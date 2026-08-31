@@ -144,20 +144,20 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
     | q`RelRL.bi_embed, #[l, r] =>
       match mode with
       | .verify =>
-        let (ls, _) ← lower_side p s.bindings l
-        let (rs, _) ← lower_side p s.bindings r
-        -- A split's declarations stay local to their side, but they land in the
-        -- one fused block, so they still have to be unique in it.
+        let (ls, b) ← lower_side p s.bindings l
+        let (rs, b) ← lower_side p b r
         let s := (s.declare (src l) .left (top_level_declared ls)).declare
                    (src r) .right (top_level_declared rs)
         let s := (s.check_side (src l) .left ls).check_side (src r) .right rs
-        return s.emit ls (prime_stmts (fragment_names rs) rs)
+        return { (s.emit ls (prime_stmts (fragment_names rs) rs)) with bindings := b }
       | .project .left =>
-        let (ls, _) ← lower_side p s.bindings l
-        return s.emit ls []
+        let (ls, b) ← lower_side p s.bindings l
+        let (_, b) ← lower_side p b r
+        return { (s.emit ls []) with bindings := b }
       | .project .right =>
-        let (rs, _) ← lower_side p s.bindings r
-        return s.emit rs []
+        let (_, b) ← lower_side p s.bindings l
+        let (rs, b) ← lower_side p b r
+        return { (s.emit rs []) with bindings := b }
     | q`RelRL.bi_if_then, #[lg, rg, thn] =>
       -- WhyRel desugars the else-less form to an empty else; so does this, by
       -- passing an empty sequence on to the same branch.

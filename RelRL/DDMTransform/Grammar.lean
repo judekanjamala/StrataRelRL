@@ -56,7 +56,9 @@ op bi_var_right (r : DeclList) : Bicommand => "Var | " r " ;";
 
 @[scope(c)]
 op bi_sync (c : Statement) : Bicommand => "|- " c " -| ;";
-op bi_embed (left : NewlineSepBy Statement, right : NewlineSepBy Statement) : Bicommand =>
+@[scope(right)]
+op bi_embed (left : NewlineSepBy Statement,
+             @[scope(left)] right : NewlineSepBy Statement) : Bicommand =>
   "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>> ;";
 
 op bi_if (lg : bool, rg : bool, thn : Seq Bicommand, els : Seq Bicommand) : Bicommand =>

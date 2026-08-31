@@ -112,36 +112,17 @@ the drift CLAUDE.md warns about.
 
 ## DDM has one linear typing context
 
-Every scoping limitation in RelRL comes from this. DDM threads a single linear
-typing context through elaboration, and `@[scope(…)]` only chooses *which*
-argument's context an operator exports — there is never more than one to export.
+DDM threads a single linear typing context through elaboration, and
+`@[scope(…)]` only chooses *which* argument's context an operator exports —
+there is never more than one to export. A bicommand has two sides, so DDM cannot
+tell which program a reference belongs to: `Var n : int | n : int ;` and
+`<< var n : int; | var n : int; >> ;` each push two bindings named `n`, and a
+reference to `n` resolves to one of them whichever side of the `|` it sits on.
 
-**A split's declarations cannot outlive it.** `bi_embed` carries no op-level
-`@[scope(…)]`, so its result context is the one it was given, and
-`Seq Bicommand` threads that unchanged onward:
-
-```
-biproc p =
-  <<
-    var a : int := 0;
-  |
-    var a : int := 0;
-  >> ;
-  <<
-    var b : int := a;      // Unknown expr identifier a
-  |
-    var b : int := a;
-  >> ;
-```
-
-Annotating it would not help: a split has two sides and one context to export,
-and exporting the left's would make a later *right*-side reference resolve
-against the left's binding. Hoisting into `|- … -|` or `Var` is the answer, and
-between them they cover every case. The error is clean and points at the source,
-so this is a limitation rather than a trap.
-
-**Assignment targets are not scope-checked.** Core's `Lhs` is
-`op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may *assign*
-to a name it cannot *read*. DDM therefore cannot reject a side that names the
-other program's variable; `BodyState.check_side` in the translator is what
-does.
+That costs nothing on its own, because priming is applied by syntactic side
+after elaboration: the reference resolves to a binding *named* `n` either way,
+and a right-hand fragment renames it to `n'`. What DDM cannot do is reject a
+side that names the *other* program's variable. Core's `Lhs` is
+`op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may even
+*assign* to a name it cannot read. `BodyState.check_side` in the translator is
+what reports that, with the source range DDM would have used.

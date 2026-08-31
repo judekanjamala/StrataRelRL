@@ -134,7 +134,8 @@ obligation the other raised at an earlier step, and nothing reports it.
 ## The other invariant: scope chain and binding threading must agree
 
 `@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
-bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`, and
+bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`,
+`@[scope(right)]` plus `@[scope(left)]` on its right side do it for a split, and
 `@[scope(body)]` on `rel` is what puts all of them in scope for `ensures`.
 `Translate/Bicommands.lean` mirrors that chain by hand when it threads Core's
 `TransBindings` from one side to the next. If the two drift, a de Bruijn index

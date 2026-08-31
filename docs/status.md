@@ -59,9 +59,9 @@
 - **Synchronized bicommands declare bi-locals.** `|- var a : int := 0; -|` runs
   on both sides and declares the *pair* `a`/`a'` from one source name. It holds
   exactly one statement, as WhyRel's does, so declaring two bi-locals is two
-  synchronized bicommands. It is the only form whose declarations outlive it, so
-  it is what puts a name in scope for a later bicommand and for a spec. A
-  split's own declarations stay local to that side.
+  synchronized bicommands. What is distinctive is the *pair* from one name:
+  `Var` and a split's own `var` declarations outlive their bicommand too, and
+  are equally nameable by a later bicommand or a spec.
 - **Relational assertions**, in a two-layer language ported from RelRL's
   `rformula` — as an `Assert { R }` anywhere in the body, seeing both sides as
   they stand at that point, or as `requires`/`ensures` clauses above the body,
@@ -150,6 +150,11 @@ and spells operators as functions — `int.add(a, b)`, `int.gt(s, 0)` rather tha
 statement grammar and translator, giving up the reuse of `Core.getProgram` the
 whole design rests on. See `docs/design.md`.
 
+### Other
+
+- **The renaming is the prime convention, not `left_`/`right_` prefixes.** 
+
+
 ### Not implemented
 
 - **Bicommands.** `Connect x with y` (WhyRel's `Biupdate`, which updates a
@@ -194,5 +199,4 @@ first do not need one.
 ### Tooling
 
 WhyRel compiles to a Why3 `.mlw` file; RelRL lowers to Core and discharges with
-cvc5 through Core's unmodified pipeline. `relrl project --side left|right`, which
-prints one side as an ordinary unary Core program, has no WhyRel equivalent.
+cvc5 through Core's unmodified pipeline. 

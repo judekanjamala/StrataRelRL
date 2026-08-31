@@ -87,10 +87,13 @@ are rejected by the parser:
   the right — so `|- var a : int := 0; -|` declares the *pair* `a`/`a'` from one
   source name.
 
-  A `bi_embed` side's own declarations stay local to that side: the grammar
-  exports nothing from a split, so both sides may reuse a name, and a later
-  bicommand or a spec cannot see either copy. `docs/issues.md` records what
-  that costs.
+  A split exports too, through `@[scope(right)]` on `bi_embed` and
+  `@[scope(left)]` on its right side, so a later bicommand can name what a split
+  declared. That the right side is elaborated in the left's context is harmless:
+  a reference resolves to a binding under the name it was written with, and
+  priming by syntactic side sends a right-hand one to its primed copy. Naming
+  the *other* program's variable is caught by `BodyState.check_side` rather than
+  by DDM — `docs/issues.md`.
 
 - **`Agree x` takes an `Ident`, not an expression, because `x'` is a name
   translation invents.** Every other relational form — `Both (e)`, `<| e <]`,
@@ -266,14 +269,6 @@ are rejected by the parser:
   (`Block.substFvar` for reads, `Block.renameLhs` for targets), so no new
   traversal was written.
 
-- **The renaming is the prime convention, not `left_`/`right_` prefixes.** The
-  left side keeps its source names and every right-side variable is primed
-  (`a` / `a'`), matching how relational program logics — WhyRel and the
-  region-logic papers this ports from — write the two states. It also keeps the
-  common case unmarked: a spec that mentions the left side reads as the original
-  program. The DDM lexer already admits `'` as an identifier character
-  (`StrataDDM/Parser.lean`), and Core carries the name through to SMT unchanged,
-  so nothing downstream needed a new escape.
 
 - **The assertion language is RelRL's own category, not Core's `Expr`.** A
   spec's operands cannot be Core expressions: DDM resolves names during
