@@ -124,14 +124,22 @@ recur through its own sides. Making the sides `Command`, or adding
 `@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
 bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`, and
 `@[scope(body)]` on `rel` is what puts all of them in scope for `ensures`.
-`Translate.lean` mirrors that chain by hand, twice over: it threads Core's
-`TransBindings` from one side to the next, and it carries `BodyState.bilocals`,
-the set a right-hand fragment is renamed against. A name that outlives its
-bicommand on the *right* has to be in both. If the bindings drift, a de Bruijn
-index resolves against the wrong binding list and Core aborts with
-`translateExpr out-of-range bound variable` — not a type error, and not at the
-line you changed. If the rename set drifts, the two programs quietly share a
-variable instead. Change one, change the others.
+`Translate.lean` mirrors that chain by hand when it threads Core's
+`TransBindings` from one side to the next. If the two drift, a de Bruijn index
+resolves against the wrong binding list and Core aborts with `translateExpr
+out-of-range bound variable` — not a type error, and not at the line you
+changed. Change one, change the other.
+
+**Priming is not part of that chain, and must not become part of it.** A
+right-hand fragment is renamed against `fragment_names` — every variable *that
+fragment* mentions — not against a set accumulated alongside the scope chain.
+This is what makes the rename total: Core has no top-level variables (a
+constant is a 0-ary function, so it lowers to `.op`, never `.fvar`), so every
+name these helpers can reach is one of the two programs' locals, and on the
+right every one of them is the right program's. Reintroducing an *expected*-name
+list would let anything off it fall through to the left program's variable, and
+the two programs would silently share it — `docs/issues.md` records what that
+cost when the list was `BodyState.bilocals`.
 
 ## Reading the dependency
 

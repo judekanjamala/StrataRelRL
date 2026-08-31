@@ -174,10 +174,11 @@ $ relrl verify splitexpr.relrl.st      # ensures { Both (a == 0) }, `a` split-de
 splitexpr.relrl.st(8, 16): Unknown expr identifier a
 ```
 
-Narrowing the `Agree` case needs the translator to check its operand against the
-names in scope — which it already computes, as `BodyState.bilocals`, plus each
-split's own declarations — and report against the formula's source range, which
-`lower_bicommand` already carries.
+Narrowing the `Agree` case needs the translator to check its operand against
+the names in scope — `BodyState.declared` holds them, with the side each was
+declared on — and report against the formula's source range, which
+`lower_bicommand` already carries. It is the same check as the one at the end of
+this file.
 
 ## DDM has one linear typing context
 
@@ -209,39 +210,45 @@ against the left's binding. Hoisting into `|- … -|` or `Var` is the answer, an
 between them they cover every case. The error is clean and points at the source,
 so this is a limitation rather than a trap.
 
-**Assignment targets are not scope-checked**, which partly masks it. Core's
-`Lhs` is `op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may
-*assign* to a name it cannot *read*. Priming is by syntactic side, so a
-right-side assignment to a *bi-local* still lands on the right copy; the case
-below is what escapes.
+**Assignment targets are not scope-checked.** Core's `Lhs` is
+`op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may *assign*
+to a name it cannot *read*. That no longer lets the two programs share a
+variable — priming is by syntactic side and covers every name a fragment
+mentions — but it is why the resulting error comes from Core rather than from
+the translator; see "A one-sided name used from the other side" below.
 
-## A right-side fragment can name a left-only variable
+## A one-sided name used from the other side is caught only by Core
 
-`prime_expr` and `prime_stmts` rename a right-hand fragment against a
-whitelist — the bi-local set — so a name outside it passes through untouched.
-That is right for a top-level Core declaration, which both programs share, and
-wrong for a variable `Var acc : int | ;` gave the left program alone:
+**Sound, but the message is Core's.** A right-hand fragment has *every*
+variable it mentions primed, so naming a left-only variable produces a primed
+name the fused block never declares, and Core rejects it. The obligation is
+never discharged — but the report is against the translated program, exit 3:
 
 ```console
-$ cat unsound.relrl.st
-biproc unsound
-  ensures { <| acc == 6 <] }        // a claim about the LEFT state
+$ cat wrong.relrl.st
+biproc wrong
+  ensures { <| acc == 6 <] }
 =
   Var acc : int | ;
-  << acc := 0; | acc := 6; >> ;
+  << acc := 0; | acc := 6; >> ;      // the right program has no `acc`
 
-$ relrl verify unsound.relrl.st
-All 1 goals passed.
+$ relrl verify wrong.relrl.st
+[wrong]: This procedure modifies variables it is not allowed to!
+Variables actually modified: [acc, acc']
+Modification allowed for these variables: [acc]
 ```
 
-The right program has no `acc`, yet its write is the one that discharges a
-left-state obligation: both sides resolved to the same Core variable. The
-symmetric direction — a left fragment naming a right-only variable — is caught,
-since a left fragment is never primed and the right's name carries the prime, so
-Core sees an undeclared variable.
+A reader has to know that `acc'` is the right program's `acc` to see what is
+being said. The same holds for a read (`No free variables are allowed here!
+Free Variables: [acc']`) and for the mirror case, a left fragment naming a
+right-only variable.
 
-Closing it means priming a right-side fragment against a *blacklist* instead:
-rename every free name except the program's top-level Core declarations, which
-is exactly the set `TransBindings.freeVars` already holds at `lower_biproc`'s
-entry. What that needs first is knowing which names a fragment binds itself,
-which is the scope check Core's lexical `Lhs` does not do.
+The translator has what it needs to say it plainly: `fragment_names` is the set
+of names a fragment mentions, and `BodyState.declared` already records which
+side each declaration was made on, for the collision check. The check is: every
+name a side's fragment mentions is either declared on that side or declared by
+the fragment itself; otherwise report "the right program has no `acc`" against
+that side's source range. Worth doing with care — `declared` also holds split
+locals, which are block-scoped, so using it as-is under-reports rather than
+over-reports.
+

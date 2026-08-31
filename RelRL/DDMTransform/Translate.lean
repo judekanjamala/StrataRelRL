@@ -54,24 +54,51 @@ def emit_invariant_violation (msg : String) : TranslateM Unit :=
 
 /-! ## Priming
 
-A shared name has to be renamed apart before the two sides are concatenated.
-Both helpers fold Core's own substitution, so no traversal is written here. -/
+A right-hand fragment is renamed apart before the two sides are concatenated.
+Both helpers fold Core's own substitution, so no traversal is written here.
+
+**What gets primed is every program variable the fragment mentions.** Core has
+no top-level variables — a constant is a 0-ary function, so it lowers to `.op`
+and never to `.fvar` — which is what makes that safe: the only names these
+helpers can reach are the two programs' own locals, and on the right side every
+one of them belongs to the right program. Renaming against a list of *expected*
+names instead would let anything off that list fall through to the left
+program's variable; `docs/issues.md` records what that cost. -/
 
 /-- Top-level declared names. One nested in an `if`/`while` body stays
-block-scoped, so it can neither collide across sides nor be named by a
-formula. -/
+block-scoped, so it cannot collide across sides. Used for the collision check,
+not for priming. -/
 def top_level_declared (stmts : List Core.Statement) : List String :=
   stmts.filterMap fun
     | .init lhs _ _ _ => some lhs.name
     | _ => none
 
+/-- Every program variable a statement fragment mentions — declared, assigned
+or read, at any depth. -/
+def fragment_names (stmts : List Core.Statement) : List String :=
+  let ids := Imperative.HasVarsImp.definedVars (P := Core.Expression) stmts false
+    ++ Imperative.HasVarsImp.modifiedVars (P := Core.Expression) stmts
+    ++ Imperative.HasVarsImp.readVars (P := Core.Expression) stmts
+  (ids.map (·.name)).eraseDups
+
+/-- The same, for an expression. -/
+def expr_names (e : Core.Expression.Expr) : List String :=
+  ((Imperative.HasFvars.getFvars (P := Core.Expression) e).map (·.name)).eraseDups
+
+/-- Renaming is a *sequential* fold over Core's own substitution, so a name
+whose primed form is also in the list would be primed twice — `{n, n'}` sends
+`n` to `n''` if `n` goes first. Longest first makes that impossible: `x'` is
+always longer than `x`, so it is already renamed when `x` produces one. -/
+def longest_first (names : List String) : List String :=
+  names.mergeSort (fun a b => b.length ≤ a.length)
+
 def prime_stmts (names : List String) (stmts : List Core.Statement) : List Core.Statement :=
-  names.foldl (init := stmts) fun ss v =>
+  (longest_first names).foldl (init := stmts) fun ss v =>
     let v' : Core.CoreIdent := ⟨v ++ "'", ()⟩
     Core.Block.renameLhs (Core.Block.substFvar ss ⟨v, ()⟩ (.fvar () v' none)) ⟨v, ()⟩ v'
 
 def prime_expr (names : List String) (e : Core.Expression.Expr) : Core.Expression.Expr :=
-  names.foldl (init := e) fun acc v =>
+  (longest_first names).foldl (init := e) fun acc v =>
     Lambda.LExpr.substFvar acc ⟨v, ()⟩ (.fvar () ⟨v ++ "'", ()⟩ none)
 
 /-! ## Lowering -/
@@ -104,9 +131,9 @@ def lower_decl_list (p : StrataDDM.Program) (bindings : TransBindings) (dl : Arg
 
 /-- Lower a relational formula to one Core `bool` expression. `Grammar.lean`
 lists what each form means; here, "the right state" is just the primed reading —
-a right-hand fragment has every bi-local it mentions renamed. -/
+a right-hand fragment has every variable it mentions renamed. -/
 partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
-    (bilocals : List String) (arg : Arg) : TransM Core.Expression.Expr := do
+    (arg : Arg) : TransM Core.Expression.Expr := do
   match arg with
   | .op op =>
     match op.name, op.args with
@@ -115,30 +142,31 @@ partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
     | q`RelRL.rf_left, #[e] =>
       translateExpr p bindings e
     | q`RelRL.rf_right, #[e] =>
-      return prime_expr bilocals (← translateExpr p bindings e)
+      let e ← translateExpr p bindings e
+      return prime_expr (expr_names e) e
     | q`RelRL.rf_both, #[e] =>
       let e ← translateExpr p bindings e
-      return bool_app Core.boolAndOp [e, prime_expr bilocals e]
+      return bool_app Core.boolAndOp [e, prime_expr (expr_names e) e]
     | q`RelRL.rf_biequal, #[_, l, r] =>
       let l ← translateExpr p bindings l
       let r ← translateExpr p bindings r
-      return .eq () l (prime_expr bilocals r)
+      return .eq () l (prime_expr (expr_names r) r)
     | q`RelRL.rf_group, #[r] =>
-      lower_rformula p bindings bilocals r
+      lower_rformula p bindings r
     | q`RelRL.rf_not, #[r] =>
-      return bool_app Core.boolNotOp [← lower_rformula p bindings bilocals r]
+      return bool_app Core.boolNotOp [← lower_rformula p bindings r]
     | q`RelRL.rf_and, #[l, r] =>
       return bool_app Core.boolAndOp
-        [← lower_rformula p bindings bilocals l, ← lower_rformula p bindings bilocals r]
+        [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | q`RelRL.rf_or, #[l, r] =>
       return bool_app Core.boolOrOp
-        [← lower_rformula p bindings bilocals l, ← lower_rformula p bindings bilocals r]
+        [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | q`RelRL.rf_implies, #[l, r] =>
       return bool_app Core.boolImpliesOp
-        [← lower_rformula p bindings bilocals l, ← lower_rformula p bindings bilocals r]
+        [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | q`RelRL.rf_iff, #[l, r] =>
       return bool_app Core.boolEquivOp
-        [← lower_rformula p bindings bilocals l, ← lower_rformula p bindings bilocals r]
+        [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | n, args =>
       TransM.error s!"unexpected relational formula {n.fullName} with {args.size} arguments"
   | _ => TransM.error "relational formula is not an operation"
@@ -196,10 +224,6 @@ inductive Mode where
 emitted — lefts, then rights — at each one and again at the end. -/
 structure BodyState where
   bindings : TransBindings
-  /-- The names a right-hand fragment gets renamed against: the bi-locals a
-  `|- … -|` declared, plus the right program's own `Var` names. A left-only
-  `Var` name is absent, which is what `issues.md` records as still open. -/
-  bilocals : List String := []
   lefts : Array (List Core.Statement) := #[]
   rights : Array (List Core.Statement) := #[]
   out : Array Core.Statement := #[]
@@ -260,9 +284,8 @@ def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := (s.declare (src l) .left (top_level_declared ls)).declare (src r) .right rnames
         return { s with
                  bindings := b
-                 bilocals := rnames ++ s.bilocals
                  lefts := s.lefts.push ls
-                 rights := s.rights.push (prime_stmts rnames rs) }
+                 rights := s.rights.push (prime_stmts (fragment_names rs) rs) }
       | .project .left => return { s with bindings := b, lefts := s.lefts.push ls }
       | .project .right => return { s with bindings := b, lefts := s.lefts.push rs }
     | q`RelRL.bi_var_left, #[l] =>
@@ -281,42 +304,35 @@ def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := s.declare (src r) .right rnames
         return { s with
                  bindings := b
-                 bilocals := rnames ++ s.bilocals
-                 rights := s.rights.push (prime_stmts rnames rs) }
+                 rights := s.rights.push (prime_stmts (fragment_names rs) rs) }
       | .project .right => return { s with bindings := b, lefts := s.lefts.push rs }
       | .project .left => return { s with bindings := b }
     | q`RelRL.bi_sync, #[c] =>
       -- One statement; `lower_side` takes the sequence a split's side is.
       let (stmts, bindings) ← lower_side p s.bindings (.seq c.ann .newline #[c])
       let names := top_level_declared stmts
-      let bilocals := names ++ s.bilocals
       match mode with
       | .verify =>
         -- One source name, declared into both programs.
         let s := (s.declare (src c) .left names).declare (src c) .right names
         return { s with
                  bindings := bindings
-                 bilocals := bilocals
                  lefts := s.lefts.push stmts
-                 rights := s.rights.push (prime_stmts bilocals stmts) }
+                 rights := s.rights.push (prime_stmts (fragment_names stmts) stmts) }
       | .project _ =>
-        return { s with
-                 bindings := bindings
-                 bilocals := bilocals
-                 lefts := s.lefts.push stmts }
+        return { s with bindings := bindings, lefts := s.lefts.push stmts }
     | q`RelRL.bi_embed, #[l, r] =>
       match mode with
       | .verify =>
         let (ls, _) ← lower_side p s.bindings l
         let (rs, _) ← lower_side p s.bindings r
-        -- A split's declarations stay local to their side, so they extend
-        -- neither `bilocals` nor the other side's priming — but they do land in
-        -- the one fused block, so they still have to be unique in it.
-        let rnames := top_level_declared rs
-        let s := (s.declare (src l) .left (top_level_declared ls)).declare (src r) .right rnames
+        -- A split's declarations stay local to their side, but they land in the
+        -- one fused block, so they still have to be unique in it.
+        let s := (s.declare (src l) .left (top_level_declared ls)).declare
+                   (src r) .right (top_level_declared rs)
         return { s with
                  lefts := s.lefts.push ls
-                 rights := s.rights.push (prime_stmts (rnames ++ s.bilocals) rs) }
+                 rights := s.rights.push (prime_stmts (fragment_names rs) rs) }
       | .project .left =>
         let (ls, _) ← lower_side p s.bindings l
         return { s with lefts := s.lefts.push ls }
@@ -332,7 +348,7 @@ def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let mut i := 0
         for conjunct in top_conjuncts r do
           i := i + 1
-          let e ← lower_rformula p s.bindings s.bilocals conjunct
+          let e ← lower_rformula p s.bindings conjunct
           out := out.push (.assert s!"assert_{s.asserts + 1}_{i}" e md)
         return { s with out := out, asserts := s.asserts + 1 }
     | n, args =>
@@ -342,7 +358,7 @@ def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
 /-- Spec clauses to Core statements — `assume` for `requires`, `assert` for
 `ensures` — one per top-level conjunct. A projection drops both. -/
 def lower_spec_clauses (mode : Mode) (p : StrataDDM.Program)
-    (ictx : Lean.Parser.InputContext) (bindings : TransBindings) (bilocals : List String)
+    (ictx : Lean.Parser.InputContext) (bindings : TransBindings)
     (kind : String) (assumed : Bool) (arg : Arg) : TransM (Array Core.Statement) := do
   match mode, arg with
   | .project _, _ => return #[]
@@ -357,7 +373,7 @@ def lower_spec_clauses (mode : Mode) (p : StrataDDM.Program)
         | #[r] =>
           for conjunct in top_conjuncts r do
             n := n + 1
-            let e ← lower_rformula p bindings bilocals conjunct
+            let e ← lower_rformula p bindings conjunct
             out := out.push <|
               if assumed then .assume s!"{kind}_{n}" e md else .assert s!"{kind}_{n}" e md
         | _ => TransM.error s!"{kind} clause does not hold exactly one relational formula"
@@ -366,20 +382,20 @@ def lower_spec_clauses (mode : Mode) (p : StrataDDM.Program)
   | _, _ => TransM.error s!"biproc's {kind} argument is not a sequence"
 
 /-- `requires` assumptions, then the bicommands, then the `ensures` obligations.
-`requires` is lowered against the *incoming* bindings and no bi-locals, matching
-its lack of `@[scope(…)]`; `ensures` against what the body ends with. -/
+`requires` is lowered against the *incoming* bindings, matching its lack of
+`@[scope(…)]`; `ensures` against what the body ends with. -/
 def lower_biproc (mode : Mode) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext) (top : TransBindings)
     (reqs : Arg) (body : Arg) (ens : Arg) :
     TransM (List Core.Statement × Array Message) := do
   match body with
   | .seq _ _ bicommands =>
-    let pre ← lower_spec_clauses mode p ictx top [] "requires" true reqs
+    let pre ← lower_spec_clauses mode p ictx top "requires" true reqs
     let mut st : BodyState := { bindings := top }
     for bicommand in bicommands do
       st ← lower_bicommand mode p ictx st bicommand
     let done := st.flush
-    let post ← lower_spec_clauses mode p ictx done.bindings done.bilocals "ensures" false ens
+    let post ← lower_spec_clauses mode p ictx done.bindings "ensures" false ens
     return ((pre ++ done.out ++ post).toList, done.diagnostics)
   | _ => TransM.error "biproc body is not a sequence of bicommands"
 

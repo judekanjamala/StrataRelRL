@@ -50,13 +50,13 @@ carrying its `SourceRange` and dialect-declared metadata.
   at a time left every cross-reference resolving to declaration 0 — see
   `docs/design.md`.
 - `lower_biproc` emits the `requires` assumptions, then the body, then the
-  `ensures` obligations. `requires` is lowered against the *incoming* bindings
-  and an empty bi-local set, matching its lack of `@[scope(…)]`; `ensures`
-  against the bindings and bi-locals the body ends with. `lower_spec_clauses`
-  handles both, differing only in `assume` versus `assert`.
+  `ensures` obligations. `requires` is lowered against the *incoming* bindings,
+  matching its lack of `@[scope(…)]`; `ensures` against the bindings the body
+  ends with. `lower_spec_clauses` handles both, differing only in `assume`
+  versus `assert`.
 - Over the body, `lower_biproc` folds `lower_bicommand`, accumulating a
-  `BodyState`: the bindings, the bi-local names, and the statements not yet
-  emitted. A relational `Assert` has to observe both sides of every bicommand
+  `BodyState`: the bindings, what has been declared on each side, and the
+  statements not yet emitted. A relational `Assert` has to observe both sides of every bicommand
   before it, so `BodyState.flush` emits the pending lefts and then the pending
   rights each time one is reached, and again at the end.
 - `lower_bicommand` handles the four forms. `bi_var` / `bi_var_left` /
@@ -64,12 +64,10 @@ carrying its `SourceRange` and dialect-declared metadata.
   puts it back in the `Core.varStatement` Core's own grammar wraps it in, and
   prime the right side's names as every other form does. `bi_sync` holds a *single*
   statement, which it lowers once and emits twice — unprimed left, primed
-  right — so one source declaration yields the bi-local pair `a`/`a'`; it is
-  also the only form that extends the bindings and the bi-local set. Declaring
-  two bi-locals is two synchronized bicommands. `bi_embed` lowers each side from the
-  bicommand's own incoming bindings and primes the right against its own
-  declarations as well as the bi-locals. `bi_assert` flushes, then emits the
-  formula.
+  right — so one source declaration yields the bi-local pair `a`/`a'`.
+  Declaring two bi-locals is two synchronized bicommands. `bi_embed` lowers each
+  side from the bicommand's own incoming bindings. `bi_assert` flushes, then
+  emits the formula.
 - Each declaring form also records what it declared, under its Core name, in
   `BodyState.declared`. Self-composition fuses both programs into one Core
   scope, so that name is what has to be unique; a repeat is a located
@@ -79,11 +77,15 @@ carrying its `SourceRange` and dialect-declared metadata.
 - `prime_stmts` and `prime_expr` are the two halves of priming, both folds over
   Core's own substitution — `Block.substFvar`/`Block.renameLhs` for statements,
   `Lambda.LExpr.substFvar` for expressions — so no traversal of the Core AST is
-  written here.
+  written here. What they rename is *everything the fragment mentions*, from
+  `fragment_names` / `expr_names`, which read Core's `HasVarsImp` and `HasFvars`
+  rather than a list threaded through `BodyState`; CLAUDE.md says why that
+  totality is the point. The fold is longest-name-first, so a fragment holding
+  both `n` and `n'` does not prime `n` twice.
 - `lower_rformula` lowers a relational formula to one Core `bool` expression.
   `Agree x` is the only lexical form (it names `x'`, which translation invents);
   everything else routes its Core expression through `Core.translateExpr` in the
-  bi-local scope, then primes it if it is a right-hand fragment. Connectives
+  bindings in scope, then primes it if it is a right-hand fragment. Connectives
   become Core's own `boolAndOp`, `boolOrOp`, `boolImpliesOp`, `boolEquivOp`,
   `boolNotOp`. `top_conjuncts` peels a top-level `/\` first, so each conjunct
   becomes its own `assert`.

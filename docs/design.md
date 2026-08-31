@@ -94,7 +94,7 @@ are rejected by the parser:
 
 - **Relational formulas lower to Core `bool`, and a top-level `/\` splits.**
   Priming is what "the right state" means: a right-hand fragment has every
-  bi-local it mentions renamed to its primed copy — the variable the right
+  variable it mentions renamed to its primed copy — the variable the right
   side's statements were lowered onto. So `Both (e)` is `e && prime e`, and
   `l =:= r` is `l == prime r`. Connectives become Core's own operators via
   `Core.boolAndOp` and friends, the same values `translateFnTable` maps Core's

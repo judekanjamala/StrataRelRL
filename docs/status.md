@@ -85,11 +85,12 @@ Ordered by cost, not by importance — correct this if the priorities are wrong.
 
 1. **`Assume { R }`.** One grammar op and one branch in `lower_bicommand`,
    mirroring `bi_assert` with `Statement.assume`. The cheapest real addition.
-2. **Scope-check a split side's names.** A right-hand fragment is renamed
-   against a whitelist, so it can still name a left-only variable and quietly
-   share its Core variable — [`issues.md`](issues.md), "A right-side fragment
-   can name a left-only variable". The fix is a blacklist, which needs to know
-   which names a fragment binds itself.
+2. **Say who owns a one-sided name.** Using a left-only variable from the
+   right, or the reverse, is caught — the primed name is simply undeclared —
+   but by Core against the translated program, exit 3
+   ([`issues.md`](issues.md), "A one-sided name used from the other side is
+   caught only by Core"). `fragment_names` and `BodyState.declared` are both
+   already computed; the check is to compare them per side.
 3. **`If e|e' then … else … end`.** Each branch is a bicommand sequence, so it
    needs the scope chain and `BodyState` handling that already exist; no new
    mechanism.
@@ -160,10 +161,12 @@ first do not need one.
 
 - **Priming is visible.** WhyRel goes to Why3 with genuinely two-state formulas;
   RelRL lowers by self-composition, so the right side really is a set of
-  variables named `a'`. Two consequences reach the surface language: `Agree x`
-  is lexical and unchecked, and a right-side fragment can still name a left-only
-  variable — [`issues.md`](issues.md), "`Agree x` is lexical" and "A right-side
-  fragment can name a left-only variable".
+  variables named `a'`, and *every* name a right-hand fragment mentions is
+  renamed — which is what keeps a one-sided variable from being shared. Two
+  consequences reach the surface language: `Agree x` is lexical and unchecked,
+  and a one-sided name used from the wrong side is reported by Core rather than
+  by the translator — [`issues.md`](issues.md), "`Agree x` is lexical" and "A
+  one-sided name used from the other side is caught only by Core".
 - **A top-level `/\` is split** into one obligation per conjunct, for readable
   verifier output. RelRL's own, not WhyRel's.
 
