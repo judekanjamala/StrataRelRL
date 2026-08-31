@@ -33,8 +33,8 @@ biproc m (k : int, out a : int, out b : int) | (k : int, out a : int, out b : in
   << call g(k, out b); | call f(k, out a); >> ;
 
 // WhyRel's `meth m2`: `( f; g | g; f )`, the same two programs aligned as one
-// step instead of two. With nothing between them it lowers to the same Core;
-// an `Assert` between the steps of `m` is what would tell them apart.
+// step instead of two. Lowering interleaves per bicommand, so this is *not* the
+// same Core as `m` — compare the two under `relrl toCore`.
 biproc m2 (k : int, out a : int, out b : int) | (k : int, out a : int, out b : int)
   requires { Agree k }
   ensures { Agree a /\ Agree b }

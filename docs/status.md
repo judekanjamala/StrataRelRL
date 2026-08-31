@@ -14,11 +14,13 @@
   `Assert { R }`.
 - **A bicommand sequence expresses an alignment.** `<< a := 3 | b := 3 >> ;
   << b := 3 | a := 3 >> ;` says which step of the left lines up with which step
-  of the right, as WhyRel's `( f | g ); ( g | f );` does. With nothing between
-  the elements it lowers to the same Core as one bicommand holding both
-  statements per side; an `Assert { R }` between them is what makes the
-  alignment observable, since the assertion sees both sides exactly as they
-  stand at that point.
+  of the right, as WhyRel's `( f | g ); ( g | f );` does. Lowering interleaves
+  per element — `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂` — so a sequence of
+  two bicommands is *not* the same Core as one bicommand holding both statements
+  per side. `RelRL/Examples/Swap.relrl.st` writes both, as WhyRel does. An
+  `Assert { R }` between the elements is what makes an alignment observable in
+  the obligations, since the assertion sees both sides exactly as they stand at
+  that point.
 - **`Var` declares bi-locals, one side at a time.** `Var s : int | t : int ;`
   declares `s` in the left program and `t` in the right; `Var acc : int | ;` and
   `Var | u : int ;` declare a variable existing in only one of them. Nothing is

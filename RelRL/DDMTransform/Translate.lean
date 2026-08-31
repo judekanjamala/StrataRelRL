@@ -21,12 +21,19 @@ open StrataDDM (Operation Arg QualifiedIdent)
 
 /-! # RelRL to Core translation
 
-A `biproc` becomes a Core procedure by self-composition: the left side keeps its
-source names, every right-side name is primed, and the two are concatenated so a
-relational formula is an ordinary Core `assert` over both. The prime is what
-separates the two programs in the one Core scope they now share, so it holds for
-asymmetric names too — `Var | u : int ;` declares the right program's `u`, which
-is `u'` in Core.
+A `biproc` becomes a Core procedure holding both programs at once: the left side
+keeps its source names, every right-side name is primed, and a relational formula
+is then an ordinary Core `assert` over both. The prime is what separates the two
+programs in the one Core scope they now share, so it holds for asymmetric names
+too — `Var | u : int ;` declares the right program's `u`, which is `u'` in Core.
+
+**The two are interleaved per bicommand, not concatenated.** `(l₁|r₁); (l₂|r₂)`
+becomes `l₁; r₁; l₂; r₂` — WhyRel's `Bisplit` emits its left then its right and
+`Biseq` composes those, so this follows it. Whole-left-then-whole-right would be
+self-composition in the textbook sense, but it is a *different program*: an
+`assume` in one side would move across the other side's statements, and could
+discharge an obligation the other program raised at an earlier step.
+`docs/design.md` has the case.
 
 Lowering runs inside Core's `TransM`, threading its `TransBindings` from one
 side to the next. **That threading mirrors the `@[scope(…)]` chain in
@@ -219,13 +226,10 @@ inductive Mode where
   | project (side : Side)
   deriving Repr
 
-/-- What a `biproc` body accumulates. `lefts`/`rights` are not yet flushed: an
-`Assert` must observe both sides of every bicommand before it, so they are
-emitted — lefts, then rights — at each one and again at the end. -/
+/-- What a `biproc` body accumulates. One output stream: each bicommand emits
+its left program's statements and then its right program's, immediately. -/
 structure BodyState where
   bindings : TransBindings
-  lefts : Array (List Core.Statement) := #[]
-  rights : Array (List Core.Statement) := #[]
   out : Array Core.Statement := #[]
   asserts : Nat := 0
   assumes : Nat := 0
@@ -293,10 +297,14 @@ def check_formula (declared : List DeclName) (fr : FileRange)
       ds.push <| Message.withRange fr
         s!"`{source}` is not a variable of the {side} program" .userError
 
-def BodyState.flush (s : BodyState) : BodyState :=
-  { s with
-    out := s.out ++ s.lefts.toList.flatten.toArray ++ s.rights.toList.flatten.toArray
-    lefts := #[], rights := #[] }
+/-- Emit one bicommand: the left program's statements, then the right's, as
+WhyRel's `Bisplit` does. **Per bicommand, not per side** — `(l₁|r₁); (l₂|r₂)`
+becomes `l₁; r₁; l₂; r₂`, never `l₁; l₂; r₁; r₂`. The two are not
+interchangeable: batching each side lets a *later* step of one program reach an
+*earlier* obligation of the other, since an `assume` in a side moves across the
+other side's statements. `docs/design.md` has the case. -/
+def BodyState.emit (s : BodyState) (left right : List Core.Statement) : BodyState :=
+  { s with out := s.out ++ left.toArray ++ right.toArray }
 
 /-- Lower one bicommand, extending the accumulator. Each branch's binding
 threading mirrors that form's `@[scope(…)]` in `Grammar.lean`. Under `project`,
@@ -317,10 +325,10 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
     let seq_body (m : Mode) (st : BodyState) (a : Arg) : TransM BodyState := do
       match a with
       | .seq _ _ cs =>
-        let mut b : BodyState := { st with lefts := #[], rights := #[], out := #[] }
+        let mut b : BodyState := { st with out := #[] }
         for c in cs do
           b ← lower_bicommand m p ictx b c
-        return b.flush
+        return b
       | _ => TransM.error "expected a sequence of bicommands"
     let keep (outer : BodyState) (b : BodyState) : BodyState :=
       { outer with asserts := b.asserts, assumes := b.assumes, diagnostics := b.diagnostics }
@@ -355,18 +363,17 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := (s.declare (src l) .left (top_level_declared ls)).declare (src r) .right rnames
         return { s with
                  bindings := b
-                 lefts := s.lefts.push ls
-                 rights := s.rights.push (prime_stmts (fragment_names rs) rs) }
-      | .project .left => return { s with bindings := b, lefts := s.lefts.push ls }
-      | .project .right => return { s with bindings := b, lefts := s.lefts.push rs }
+                 out := (s.emit ls (prime_stmts (fragment_names rs) rs)).out }
+      | .project .left => return { (s.emit ls []) with bindings := b }
+      | .project .right => return { (s.emit rs []) with bindings := b }
     | q`RelRL.bi_var_left, #[l] =>
       let (ls, b) ← lower_decl_list p s.bindings l
       match mode with
       | .project .right => return { s with bindings := b }
-      | .project .left => return { s with bindings := b, lefts := s.lefts.push ls }
+      | .project .left => return { (s.emit ls []) with bindings := b }
       | .verify =>
         let s := s.declare (src l) .left (top_level_declared ls)
-        return { s with bindings := b, lefts := s.lefts.push ls }
+        return { (s.emit ls []) with bindings := b }
     | q`RelRL.bi_var_right, #[r] =>
       let (rs, b) ← lower_decl_list p s.bindings r
       let rnames := top_level_declared rs
@@ -375,8 +382,8 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := s.declare (src r) .right rnames
         return { s with
                  bindings := b
-                 rights := s.rights.push (prime_stmts (fragment_names rs) rs) }
-      | .project .right => return { s with bindings := b, lefts := s.lefts.push rs }
+                 out := (s.emit [] (prime_stmts (fragment_names rs) rs)).out }
+      | .project .right => return { (s.emit rs []) with bindings := b }
       | .project .left => return { s with bindings := b }
     | q`RelRL.bi_sync, #[c] =>
       -- One statement; `lower_side` takes the sequence a split's side is.
@@ -390,10 +397,9 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := (s.check_side (src c) .left stmts).check_side (src c) .right stmts
         return { s with
                  bindings := bindings
-                 lefts := s.lefts.push stmts
-                 rights := s.rights.push (prime_stmts (fragment_names stmts) stmts) }
+                 out := (s.emit stmts (prime_stmts (fragment_names stmts) stmts)).out }
       | .project _ =>
-        return { s with bindings := bindings, lefts := s.lefts.push stmts }
+        return { (s.emit stmts []) with bindings := bindings }
     | q`RelRL.bi_embed, #[l, r] =>
       match mode with
       | .verify =>
@@ -404,15 +410,13 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := (s.declare (src l) .left (top_level_declared ls)).declare
                    (src r) .right (top_level_declared rs)
         let s := (s.check_side (src l) .left ls).check_side (src r) .right rs
-        return { s with
-                 lefts := s.lefts.push ls
-                 rights := s.rights.push (prime_stmts (fragment_names rs) rs) }
+        return s.emit ls (prime_stmts (fragment_names rs) rs)
       | .project .left =>
         let (ls, _) ← lower_side p s.bindings l
-        return { s with lefts := s.lefts.push ls }
+        return s.emit ls []
       | .project .right =>
         let (rs, _) ← lower_side p s.bindings r
-        return { s with lefts := s.lefts.push rs }
+        return s.emit rs []
     | q`RelRL.bi_if_then, #[lg, rg, thn] =>
       -- WhyRel desugars the else-less form to an empty else; so does this, by
       -- passing an empty sequence on to the same branch.
@@ -428,7 +432,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         -- Both sides are put under *one* Core `if`, which is faithful only
         -- because the guards are proved to agree first. That obligation is what
         -- WhyRel's rule for `If` requires to align the two branches at all.
-        let s := s.flush
         -- Take this `If`'s label before lowering the branches, so a nested one
         -- reads as the later obligation it is.
         let n := s.asserts + 1
@@ -445,7 +448,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
                           |>.push (.ite (.det lge) t.out.toList e.out.toList md) }
       | .project side =>
         let g ← translateExpr p s.bindings (match side with | .left => lg | .right => rg)
-        let s := s.flush
         let t ← seq_body mode s thn
         let e ← seq_body mode (keep s t) els
         let s := keep s e
@@ -458,7 +460,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       match mode with
       | .verify =>
         let rge := prime_expr (expr_names rge) rge
-        let s := s.flush
         let s := { s with diagnostics := s.diagnostics
                      ++ check_formula s.declared (src lg) lge
                      ++ check_formula s.declared (src rg) rge }
@@ -480,7 +481,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         -- `annot.ml`'s `projl`/`projr`: one side's guard picks between the two
         -- branches that agree on that side — then-then against else-then on the
         -- left, then-then against then-else on the right.
-        let s := s.flush
         let (g, thn, els) := match side with
           | .left => (lge, tt, et)
           | .right => (rge, tt, te)
@@ -504,7 +504,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let rge := prime_expr (expr_names rge) rge
         let lae ← lower_rformula p s.bindings la
         let rae ← lower_rformula p s.bindings ra
-        let s := s.flush
         let n := s.asserts + 1
         let s := { s with asserts := n, diagnostics := s.diagnostics
                      ++ check_formula s.declared (src lg) lge
@@ -536,7 +535,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
             ((s!"while_{n}_align", align) :: invEs) [inner] md
         return { s with out := s.out.push loop }
       | .project side =>
-        let s := s.flush
         let b ← seq_body mode s body
         let s := keep s b
         let g := match side with | .left => lge | .right => rge
@@ -549,7 +547,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       match mode with
       | .verify =>
         let rge := prime_expr (expr_names rge) rge
-        let s := s.flush
         let n := s.asserts + 1
         let s := { s with asserts := n, diagnostics := s.diagnostics
                      ++ check_formula s.declared (src lg) lge
@@ -564,7 +561,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
             b.out.toList md
         return { s with out := s.out.push loop }
       | .project side =>
-        let s := s.flush
         let b ← seq_body mode s body
         let s := keep s b
         let g := match side with | .left => lge | .right => rge
@@ -578,7 +574,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       let ge ← translateExpr p s.bindings g
       match mode with
       | .verify =>
-        let s := s.flush
         let n := s.asserts + 1
         let s := { s with
                    asserts := n
@@ -590,7 +585,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         return { s with out := s.out.push (.loop (.det ge) none invEs b.out.toList md) }
       | .project .right => return s
       | .project .left =>
-        let s := s.flush
         let b ← seq_body mode s body
         let s := keep s b
         return { s with out := s.out.push (.loop (.det ge) none [] b.out.toList md) }
@@ -599,7 +593,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       match mode with
       | .verify =>
         let ge := prime_expr (expr_names ge) ge
-        let s := s.flush
         let n := s.asserts + 1
         let s := { s with
                    asserts := n
@@ -611,7 +604,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         return { s with out := s.out.push (.loop (.det ge) none invEs b.out.toList md) }
       | .project .left => return s
       | .project .right =>
-        let s := s.flush
         let b ← seq_body mode s body
         let s := keep s b
         return { s with out := s.out.push (.loop (.det ge) none [] b.out.toList md) }
@@ -619,7 +611,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       match mode with
       | .project _ => return s
       | .verify =>
-        let s := s.flush
         let mut out := s.out
         let mut ds := s.diagnostics
         let mut i := 0
@@ -631,11 +622,10 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         return { s with out := out, asserts := s.asserts + 1, diagnostics := ds }
     | q`RelRL.bi_assume, #[r] =>
       -- Same shape as `bi_assert`: it has to observe both sides as they stand,
-      -- so it flushes first. `Statement.assume` in place of `.assert`.
+      -- `Statement.assume` in place of `.assert`.
       match mode with
       | .project _ => return s
       | .verify =>
-        let s := s.flush
         let mut out := s.out
         let mut ds := s.diagnostics
         let mut i := 0
@@ -724,7 +714,7 @@ def lower_biproc (mode : Mode) (p : StrataDDM.Program)
     let mut st : BodyState := { bindings := top, declared := ps }
     for bicommand in bicommands do
       st ← lower_bicommand mode p ictx st bicommand
-    let done := st.flush
+    let done := st
     let (post, postDiags) ←
       lower_spec_clauses mode p ictx done.bindings done.declared "ensures" false ens
     return (inputs, outputs, (pre ++ done.out ++ post).toList,

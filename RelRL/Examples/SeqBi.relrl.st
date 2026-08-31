@@ -1,6 +1,6 @@
 // What a bicommand sequence buys: an `Assert` between two aligned steps sees
-// each side exactly as it stands there. Without one the alignment is
-// unobservable — docs/design.md.
+// each side exactly as it stands there, because lowering interleaves per
+// bicommand rather than batching each side — docs/design.md.
 
 program RelRL;
 

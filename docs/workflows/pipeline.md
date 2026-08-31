@@ -63,10 +63,12 @@ carrying its `SourceRange` and dialect-declared metadata.
   ends with. `lower_spec_clauses` handles both, differing only in `assume`
   versus `assert`.
 - Over the body, `lower_biproc` folds `lower_bicommand`, accumulating a
-  `BodyState`: the bindings, what has been declared on each side, and the
-  statements not yet emitted. A relational `Assert` has to observe both sides of every bicommand
-  before it, so `BodyState.flush` emits the pending lefts and then the pending
-  rights each time one is reached, and again at the end.
+  `BodyState`: the bindings, what has been declared on each side, and one output
+  stream. `BodyState.emit` appends a bicommand's left statements and then its
+  right ones, so the two programs interleave per element rather than being
+  batched per side; `docs/design.md` says why that distinction is not cosmetic.
+  A relational `Assert` therefore sees both sides as they stand simply by being
+  emitted where it appears.
 - `lower_bicommand` handles the four forms. `bi_var` / `bi_var_left` /
   `bi_var_right` lower each side's `DeclList` through `lower_decl_list`, which
   puts it back in the `Core.varStatement` Core's own grammar wraps it in, and
@@ -75,11 +77,11 @@ carrying its `SourceRange` and dialect-declared metadata.
   right — so one source declaration yields the bi-local pair `a`/`a'`.
   Declaring two bi-locals is two synchronized bicommands. `bi_embed` lowers each
   side from the bicommand's own incoming bindings. `bi_assert` and `bi_assume`
-  flush, then emit the formula as an `assert` or an `assume`.
+  emit the formula as an `assert` or an `assume`.
 - The compound forms — `bi_if`, `bi_if_then`, `bi_if4`, `bi_while`,
   `bi_while_lockstep`, `bi_while_left`, `bi_while_right` — lower their nested
   bicommand sequences through `seq_body`, which runs the same fold into a fresh
-  accumulator and flushes it. Declarations inside do not come back out, since
+  accumulator. Declarations inside do not come back out, since
   the sequence becomes a Core block; the assert and assume counters do, so
   labels stay unique across the body. `seq_body` takes its own `Mode` because
   `bi_while` lowers its body three times — fused, and once per side for the

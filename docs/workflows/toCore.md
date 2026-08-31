@@ -32,10 +32,10 @@ procedure aligned ()
 {
   biproc: {
     var a : int := 0;
-    var b : int := 0;
-    a := 1;
     var |a'| : int := 0;
+    var b : int := 0;
     var |b'| : int := 0;
+    a := 1;
     |a'| := 1;
     assert [assert_1_1]: a == a';
     assert [assert_1_2]: b == 0 && b' == 0;
@@ -51,7 +51,11 @@ Everything the lowering does is visible here:
 
 - The `biproc` became a Core `procedure` **of the same name**.
 - Both sides are in one flat statement list inside a single block labelled
-  `biproc` — left in order, then right, no `left:`/`right:` nesting.
+  `biproc`, with no `left:`/`right:` nesting. They interleave **per bicommand** —
+  each element's left statements, then its right ones — so the two declarations
+  pair up, then the two `a := 1` steps, then the `Assert` that relates them.
+  Not left-in-full followed by right-in-full; `docs/design.md` says why the
+  difference matters.
 - Each synchronized `|- … -|` was emitted **twice**: unprimed as the left
   side's declaration, primed as the right's. One source name, the bi-local
   pair. It holds one statement, so `a` and `b` are two of them.
