@@ -81,10 +81,20 @@ since it is a command both programs run.
 | Code | Meaning | Trigger |
 |---|---|---|
 | 0 | printed | |
-| 1 | user error | missing or unrecognised `--side`, parse error, unreadable file |
-| 3 | `internalError` | translation emitted a diagnostic — the program printed is not the program written |
+| 1 | user error | missing or unrecognised `--side`, parse error, unreadable file, or an error in the source program |
+| 3 | `internalError` | a broken translator invariant — the program printed is not the program written |
 
-The exit-3 row is defensive: translation diagnostics come from
+One source error reaches projection: a `datatype`, or a `rec` block of more than
+one function, in a file that also declares a `biproc`. That guard is not
+mode-gated, because what it protects — the top-level binding list every body is
+lowered against — is as wrong here as under `verify`
+([`issues.md`](../issues.md)). No body is lowered once it fires, so what prints
+is the Core declarations alone, and the exit code is 1.
+
+The duplicate-declaration check does *not* run here: it is about names colliding
+in the one block self-composition fuses, and a projection has no such block.
+
+The exit-3 row is defensive: the remaining translation diagnostics come from
 `emit_invariant_violation`, which fires only if the grammar and translator have
 drifted, so no `.relrl.st` input reaches it. A relational formula that Core
 later rejects does *not* trigger it here — projection drops formulas before they

@@ -48,7 +48,10 @@ carrying its `SourceRange` and dialect-declared metadata.
   `translateCoreDecls` pass, so Core's binding state threads across them, and
   lowers each `biproc` against the bindings that produces. Doing it one command
   at a time left every cross-reference resolving to declaration 0 — see
-  `docs/design.md`.
+  `docs/design.md`. The binding list is reconstructed from the decls that pass
+  returns, which holds only while each command contributes exactly one;
+  `misaligning_command?` refuses the two that do not, in any mode, rather than
+  lower a body against a short list — [`issues.md`](../issues.md).
 - `lower_biproc` emits the `requires` assumptions, then the body, then the
   `ensures` obligations. `requires` is lowered against the *incoming* bindings,
   matching its lack of `@[scope(…)]`; `ensures` against the bindings the body
@@ -127,9 +130,11 @@ ordinary self-composition — the standard encoding for the forall-forall
 fragment, and sound precisely because after priming neither side can observe the
 other.
 
-Only *top-level* declarations of a side are primed. One nested inside an `if`
-or `while` body stays block-scoped, so it can neither collide across sides nor
-be named by a formula.
+Every variable a right-hand fragment mentions is primed, at any depth — one
+declared inside an `if` or `while` body included, so the two sides stay disjoint
+without relying on Core's block scoping to separate them. `top_level_declared`
+survives only for the collision check, where block-scoped names are not at
+stake.
 
 The result is an ordinary `Core.Program`. Everything downstream is exactly
 Core's pipeline, unmodified.

@@ -192,15 +192,18 @@ are rejected by the parser:
 - **Relational specs name both sides, and the sides are flattened.** An
   `ensures [l]: a == a'` clause needs to name both sides at once, and Core block
   scoping makes that impossible while the sides are nested in `left:` / `right:`
-  blocks. So translation renames each side's top-level locals apart and
-  concatenates the sides — self-composition, sound for forall-forall because
-  renaming makes the sides unable to observe each other. Core supplies the
-  renaming (`Block.substFvar` for reads, `Block.renameLhs` for targets), so no
-  new traversal was written.
+  blocks. So translation renames the right side apart and concatenates the
+  sides — self-composition, sound for forall-forall because renaming makes the
+  sides unable to observe each other. That soundness needs the rename to be
+  *total* over the fragment, which is why it is driven by what the fragment
+  mentions rather than by a list of expected names; CLAUDE.md's second invariant
+  says what happens otherwise. Core supplies the renaming itself
+  (`Block.substFvar` for reads, `Block.renameLhs` for targets), so no new
+  traversal was written.
 
 - **The renaming is the prime convention, not `left_`/`right_` prefixes.** The
-  left side keeps its source names and the right side's top-level locals are
-  primed (`a` / `a'`), matching how relational program logics — WhyRel and the
+  left side keeps its source names and every right-side variable is primed
+  (`a` / `a'`), matching how relational program logics — WhyRel and the
   region-logic papers this ports from — write the two states. It also keeps the
   common case unmarked: a spec that mentions the left side reads as the original
   program. The DDM lexer already admits `'` as an identifier character

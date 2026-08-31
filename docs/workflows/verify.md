@@ -20,8 +20,8 @@ verification stages themselves are [`pipeline.md`](pipeline.md) §2 and §3.
    `StrataDDM.Program` ([`pipeline.md`](pipeline.md) §1).
 2. `translate_program` — self-composition lowering to `Core.Program`
    ([`pipeline.md`](pipeline.md) §2). The two sides are flattened into one
-   procedure, the right side's top-level locals primed, and each `ensures` spec
-   becomes a Core `assert` after both sides have run.
+   procedure, every right-side variable primed, and each `ensures` spec becomes
+   a Core `assert` after both sides have run.
 3. `Strata.Core.verifyProgram` — Core's own VC generation and SMT discharge,
    unmodified ([`pipeline.md`](pipeline.md) §3).
 
