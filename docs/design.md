@@ -92,6 +92,34 @@ are rejected by the parser:
   bicommand or a spec cannot see either copy. `docs/issues.md` records what
   that costs.
 
+- **Conditionals collapse to one Core `if`, paid for by an obligation.**
+  `If e|e' then CC else DD end` emits `assert e <=> e'` and then a *single*
+  `if e { … }` holding both sides. Two `if`s, one per side, would not need the
+  assert — but they would also not let a bicommand inside a branch relate the
+  two states, which is the whole point of the form. WhyRel's `compile_bicommand`
+  does exactly this, and the assert is what makes it faithful.
+
+  `If4 e|e'` is the form for guards that need not agree, and pays instead with
+  four branches over `e /\ e'`, `e /\ ¬e'`, `¬e /\ e'` and the rest. Both are
+  ported from `translate.ml` in `dnaumann/RelRL`; the projections follow that
+  repo's `annot.ml`, where a four-way if projects onto one side by keeping the
+  two branches that agree on it.
+
+- **A loop's alignment guards decide who steps, and the invariant rules out
+  deadlock.** `While e|e' . p|p' do … done` lowers to one Core loop guarded by
+  `e \/ e'`, whose body is
+  `if e /\ p then <left projection> else if e' /\ p' then <right projection>
+  else <both sides>`, and which carries the alignment condition
+  `(e /\ p) \/ (e' /\ p') \/ (e /\ e') \/ (¬e /\ ¬e')` as an invariant. The
+  one-sided steps are literally this translator's `project` mode applied to the
+  body, which is why that mode is more than a printing aid. The invariant is
+  what rules out a state where one side must step and its guard forbids it —
+  WhyRel calls that outcome Fault. Lockstep is the same shape with both
+  alignment guards false, and gets its own op so the guards can be omitted;
+  `WhileL`/`WhileR` drive the loop from one side and, as in WhyRel, still run
+  the whole bicommand body, so it is the body that says the other side stands
+  still.
+
 - **Relational formulas lower to Core `bool`, and a top-level `/\` splits.**
   Priming is what "the right state" means: a right-hand fragment has every
   variable it mentions renamed to its primed copy — the variable the right

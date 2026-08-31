@@ -69,8 +69,16 @@ carrying its `SourceRange` and dialect-declared metadata.
   statement, which it lowers once and emits twice — unprimed left, primed
   right — so one source declaration yields the bi-local pair `a`/`a'`.
   Declaring two bi-locals is two synchronized bicommands. `bi_embed` lowers each
-  side from the bicommand's own incoming bindings. `bi_assert` flushes, then
-  emits the formula.
+  side from the bicommand's own incoming bindings. `bi_assert` and `bi_assume`
+  flush, then emit the formula as an `assert` or an `assume`.
+- The compound forms — `bi_if`, `bi_if_then`, `bi_if4`, `bi_while`,
+  `bi_while_lockstep`, `bi_while_left`, `bi_while_right` — lower their nested
+  bicommand sequences through `seq_body`, which runs the same fold into a fresh
+  accumulator and flushes it. Declarations inside do not come back out, since
+  the sequence becomes a Core block; the assert and assume counters do, so
+  labels stay unique across the body. `seq_body` takes its own `Mode` because
+  `bi_while` lowers its body three times — fused, and once per side for the
+  steps only one side takes. `docs/design.md` has each form's lowering.
 - Each declaring form also records what it declared, under its Core name, in
   `BodyState.declared`. Self-composition fuses both programs into one Core
   scope, so that name is what has to be unique; a repeat is a located

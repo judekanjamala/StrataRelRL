@@ -30,6 +30,18 @@
   synchronized bicommand, a split's own declaration, or a one-sided `Var`. So
   `s =:= t` reads as `s == t'`, and a colliding declaration is reported against
   its own source range rather than by Core against the fused program.
+- **Conditionals.** `If e|e' then CC else DD end` and its else-less form put
+  both sides under one Core `if`, which is sound because the guards are proved
+  to agree first — that obligation is the point of the form. `If4 e|e'` is for
+  guards that need not agree: no obligation, a branch per combination.
+  `RelRL/Examples/Branching.relrl.st`.
+- **Loops, with alignment guards.** `While e|e' . p|p' do invariant { R } … done`
+  is WhyRel's general biwhile: `p` lets the left step alone, `p'` the right,
+  neither is lockstep, and the loop carries an `align` invariant ruling out a
+  state where neither may step. `While e|e' do … done` is lockstep, and
+  `WhileL e` / `WhileR e` drive the loop from one side.
+  `RelRL/Examples/Loops.relrl.st`.
+- **`Assume { R }`**, the dual of `Assert { R }`, lowering to Core's `assume`.
 - **Synchronized bicommands declare bi-locals.** `|- var a : int := 0; -|` runs
   on both sides and declares the *pair* `a`/`a'` from one source name. It holds
   exactly one statement, as WhyRel's does, so declaring two bi-locals is two
@@ -83,24 +95,16 @@
 
 Ordered by cost, not by importance — correct this if the priorities are wrong.
 
-1. **`Assume { R }`.** One grammar op and one branch in `lower_bicommand`,
-   mirroring `bi_assert` with `Statement.assume`. The cheapest real addition.
-2. **Say who owns a one-sided name.** Using a left-only variable from the
-   right, or the reverse, is caught — the primed name is simply undeclared —
-   but by Core against the translated program, exit 3
-   ([`issues.md`](issues.md), "A one-sided name used from the other side is
-   caught only by Core"). `fragment_names` and `BodyState.declared` are both
-   already computed; the check is to compare them per side.
-3. **`If e|e' then … else … end`.** Each branch is a bicommand sequence, so it
-   needs the scope chain and `BodyState` handling that already exist; no new
-   mechanism.
-4. **`While e|e' . <guard> do … done`.** The first genuinely new mechanism:
-   alignment guards and relational invariants have no counterpart yet.
-5. **Biproc parameters and returns.** The largest blocker. WhyRel's
-   `meth m (n:int|n:int) : (int|int)` has no equivalent, and without it there is
-   no `result`, no call between biprocs, and no `bimodule` layer — and
-   `requires` stays thin, since a precondition has only top-level constants to
-   talk about.
+1. **Biproc parameters and returns.** The largest blocker, and the only item
+   left that needs no heap. WhyRel's `meth m (n:int|n:int) : (int|int)` has no
+   equivalent, and without it there is no `result`, no call between biprocs, and
+   no `bimodule` layer — and `requires` stays thin, since a precondition has
+   only top-level constants to talk about.
+2. **A loop `variant`.** WhyRel's is a *bi*-expression and Core's loop measure
+   is one expression, so the two do not line up without a decision about which
+   side measures. Loops verify for partial correctness without it.
+3. **Fix the `datatype` misalignment upstream**, which would let the guard in
+   `misaligning_command?` be deleted — [`issues.md`](issues.md).
 
 Everything in [Not implemented](#not-implemented) below that is not listed here
 needs a heap model first.
@@ -118,6 +122,7 @@ under `examples/all_all/`.
 | `\|_ c _\|` | `\|- c -\|` | Forced: DDM's lexer cannot tokenize `_\|` at all — `CLAUDE.md`, "Things that will bite" |
 | `Var x:T \| y:T in CC` | `Var x:T \| y:T ;` | No `in CC`; a bicommand sequence is already the scope |
 | `Both f` | `Both (e)` | Parens mandatory — the operand is a Core expression |
+| `While e\|e' . do … done` | `While e\|e' do … done` | Lockstep is its own op rather than an empty alignment guard; DDM has no optional-with-separator form |
 
 `=:=`, `Agree x`, `<| … <]`, `[> … |>`, `~ /\ \/ => <=>`, `Assert { R }` and the
 placement of `requires`/`ensures` above the body all match WhyRel as written.
@@ -133,9 +138,13 @@ whole design rests on. See `docs/design.md`.
 
 ### Not implemented
 
-- **Bicommands.** `If e|e' then … else … end`, `While e|e' . <guard> do … done`,
-  `Assume { R }`, `Connect x with y`. Split, synchronized, `Var` and `Assert`
-  are what exist.
+- **Bicommands.** `Connect x with y` (WhyRel's `Biupdate`, which updates a
+  refperm) and `HavocR x { R }` (all-exists mode only). Everything else WhyRel's
+  parser accepts is implemented: split, synchronized, `Var`, `Assert`, `Assume`,
+  `If`, `If4`, `While`, `WhileL`, `WhileR`.
+- **Loop `effects` and `variant`.** WhyRel's `biwhile_spec` carries both;
+  `effects` needs regions, and `variant` is a bi-expression against Core's
+  single loop measure.
 - **Datatypes and multi-function `rec` blocks alongside a `biproc`.** Rejected
   with a located error, because the biproc body's references to top-level
   declarations would silently misresolve — [`issues.md`](issues.md), "A

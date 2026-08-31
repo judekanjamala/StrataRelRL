@@ -138,8 +138,10 @@ deliberate change that belongs in the same commit as this table.
 | `SeqBi.relrl.st` | 4/4 pass | 0 | a bicommand sequence with an `Assert` between the aligned steps |
 | `Swap.relrl.st` | 2/2 pass | 0 | the WhyRel swap port: synchronized declarations, a two-step alignment |
 | `BiVar.relrl.st` | 4/4 pass | 0 | `Var` in all three forms, with and without a repeated name, against `\|- … -\|` |
+| `Branching.relrl.st` | 5/5 pass | 0 | `If` with and without `else`, and `If4`; the guard-agreement obligation |
+| `Loops.relrl.st` | 20/20 pass | 0 | `While` lockstep and with alignment guards, `WhileL`, `WhileR`, `invariant` |
 
-`toCore` and `project --side left|right` should exit 0 on all four.
+`toCore` and `project --side left|right` should exit 0 on all six.
 
 ## Flags
 
