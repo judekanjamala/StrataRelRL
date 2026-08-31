@@ -7,8 +7,6 @@ program RelRL;
 // `If` puts both sides under one Core `if`. That is faithful only because the
 // guards are proved equal first — the `if_guards_1` obligation below.
 biproc agreeing
-  requires { <| true <] }
-  ensures { Agree r }
 =
   |- var n : int; -| ;
   |- var r : int := 0; -| ;
@@ -18,10 +16,10 @@ biproc agreeing
   else
     << r := 2; | r := 2; >> ;
   end ;
+  Assert { Agree r } ;
 
 // The else-less form, as WhyRel writes it.
 biproc no_else
-  ensures { Agree r }
 =
   |- var n : int; -| ;
   |- var r : int := 0; -| ;
@@ -29,11 +27,11 @@ biproc no_else
   If int.gt(n, 0) | int.gt(n, 0) then
     << r := 1; | r := 1; >> ;
   end ;
+  Assert { Agree r } ;
 
 // `If4` is for guards that need not agree: no obligation, one branch per
 // combination. Here the two programs hold *different* flags.
 biproc four_way
-  ensures { r =:= q }
 =
   Var a : bool | b : bool ;
   Var r : int  | q : int ;
@@ -47,3 +45,4 @@ biproc four_way
   elseElse
     << r := 4; | q := 4; >> ;
   end ;
+  Assert { r =:= q } ;

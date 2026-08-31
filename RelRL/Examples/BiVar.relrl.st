@@ -7,7 +7,6 @@ program RelRL;
 // Both programs leave their result at 6. The left gets there through an
 // accumulator; the right has no such variable at all.
 biproc differing
-  ensures { s =:= t }
 =
   // The right side is primed like any other, so `s =:= t` is `s == t'`.
   Var s : int | t : int ;
@@ -19,11 +18,11 @@ biproc differing
   |
     t := 6;
   >> ;
+  Assert { s =:= t } ;
 
 // `Var` does not need the names to differ — the right side is primed, so this
 // is WhyRel's own `Var i:int | i:int` and the two `n`s stay apart.
 biproc repeated
-  ensures { <| n == 1 <] /\ [> n == 2 |> }
 =
   Var n : int | n : int ;
   <<
@@ -31,11 +30,11 @@ biproc repeated
   |
     n := 2;
   >> ;
+  Assert { <| n == 1 <] /\ [> n == 2 |> } ;
 
 // The synchronized form instead declares the *pair* `n`/`n'` from one source
 // name, which is what `Agree n` needs: one variable both programs have.
 biproc shared
-  ensures { Agree n }
 =
   |- var n : int; -| ;
   <<
@@ -43,3 +42,4 @@ biproc shared
   |
     n := 1;
   >> ;
+  Assert { Agree n } ;

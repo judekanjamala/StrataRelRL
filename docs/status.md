@@ -38,6 +38,9 @@
   commuting methods in opposite orders relate through those specs alone — which
   is what WhyRel's flagship `all_all/swap` example does.
   `RelRL/Examples/Swap.relrl.st` ports it, `m` and `m2` both.
+- **`old x` in a spec**, for an `inout` parameter: its value on entry. Core
+  snapshots that for `inout` parameters, and RelRL's specs are Core
+  pre/postconditions, so it works on either side and under `Both`.
 - **Biproc parameters and returns.** `biproc m (n : int, out result : int) |
   (n : int, out result : int)` gives the Core procedure inputs `n`, `n'` and
   outputs `result`, `result'`. Each side is a Core `Bindings`, so `out` and
@@ -61,18 +64,22 @@
   exactly one statement, as WhyRel's does, so declaring two bi-locals is two
   synchronized bicommands. What is distinctive is the *pair* from one name:
   `Var` and a split's own `var` declarations outlive their bicommand too, and
-  are equally nameable by a later bicommand or a spec.
+  are equally nameable by a later bicommand. No spec can name any of them.
 - **Relational assertions**, in a two-layer language ported from RelRL's
   `rformula` — as an `Assert { R }` anywhere in the body, seeing both sides as
   they stand at that point, or as `requires`/`ensures` clauses above the body,
-  Boogie-style and repeatable. `requires` is assumed on entry, so it names the
-  parameters and the file's top-level Core declarations, but nothing the body
-  declares; `ensures` is asserted on exit and can also name bi-locals:
+  Boogie-style and repeatable. Both spec clauses are scoped to the parameters,
+  so they name what the caller can see and never a bi-local, and both become
+  Core's own pre/postconditions — which is what makes `old x` mean the entry
+  value of an `inout` parameter. A claim about a bi-local is an `Assert`:
 
   ```
   biproc sum
-    requires { Both (int.gt(bound, 0)) }
-    ensures {
+    requires { Both (int.gt(bound, 0)) }   // `bound` is top-level, so nameable
+  =
+    |- var s : int := 0; -| ;
+    << … | … >> ;
+    Assert {
       Agree s                                      // RelRL's Agree
       /\ Both (int.gt(s, 0))                        // Rboth
       /\ <| last == 3 <]                            // Rleft
@@ -80,11 +87,7 @@
       /\ last =:= int.add(int.mul(last, 2), 1)      // Rbiequal
       /\ Agree a /\ Agree b                          // Rconn, with \/ => <=>
       /\ { ~ Agree last => { Agree s \/ Agree a } }  // Rnot, { … } to group
-    }
-  =
-    |- var s : int := 0; -| ;
-    << … | … >> ;
-    Assert { Agree s } ;
+    } ;
   ```
 
   The expression layer inside is Core's, spelled as Core spells it —

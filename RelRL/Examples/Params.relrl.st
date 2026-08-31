@@ -21,9 +21,11 @@ biproc asymmetric (a : int, out r : int) | (b : int, c : int, out q : int)
 =
   << r := a; | q := int.sub(int.add(b, c), c); >> ;
 
-// An `inout` parameter, from Core's own binding syntax.
+// An `inout` parameter, from Core's own binding syntax. `old x` is its value on
+// entry — Core snapshots that for an `inout`, which is why a spec has to be a
+// real pre/postcondition rather than an assert in the body.
 biproc bump (inout x : int) | (inout x : int)
   requires { Agree x }
-  ensures { Agree x }
+  ensures { Agree x /\ Both (x == int.add(old x, 1)) }
 =
   << x := int.add(x, 1); | x := int.add(x, 1); >> ;

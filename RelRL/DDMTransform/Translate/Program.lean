@@ -38,12 +38,12 @@ argues the choices.
 `ensures` — one per top-level conjunct. A projection drops both. -/
 def lower_spec_clauses (mode : Mode) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext) (bindings : TransBindings) (declared : List DeclName)
-    (kind : String) (assumed : Bool) (arg : Arg) :
-    TransM (Array Core.Statement × Array Message) := do
+    (kind : String) (arg : Arg) :
+    TransM (ListMap Core.CoreLabel Core.Procedure.Check × Array Message) := do
   match mode, arg with
-  | .project _, _ => return (#[], #[])
+  | .project _, _ => return ([], #[])
   | _, .seq _ _ clauses =>
-    let mut out : Array Core.Statement := #[]
+    let mut out : ListMap Core.CoreLabel Core.Procedure.Check := []
     let mut ds : Array Message := #[]
     let mut n := 0
     for clause in clauses do
@@ -57,8 +57,9 @@ def lower_spec_clauses (mode : Mode) (p : StrataDDM.Program)
             n := n + 1
             let e ← lower_rformula p bindings conjunct
             ds := ds ++ check_formula declared fr e
-            out := out.push <|
-              if assumed then .assume s!"{kind}_{n}" e md else .assert s!"{kind}_{n}" e md
+            let entry : Core.CoreLabel × Core.Procedure.Check :=
+              (s!"{kind}_{n}", { expr := e, md := md })
+            out := out.append [entry]
         | _ => TransM.error s!"{kind} clause does not hold exactly one relational formula"
       | _ => TransM.error s!"{kind} clause is not an operation"
     return (out, ds)
@@ -92,28 +93,28 @@ def lower_params (mode : Mode) (top : TransBindings) (params : Arg) :
     | _ => TransM.error "biproc parameters are not a left/right pair"
   | _ => TransM.error "biproc parameters are not an option"
 
-/-- `requires` assumptions, then the bicommands, then the `ensures` obligations.
-`requires` is lowered against the *incoming* bindings, matching its lack of
-`@[scope(…)]`; `ensures` against what the body ends with. -/
+/-- The procedure a `biproc` becomes: its signature, its contract, and its body.
+
+Both clauses are lowered against the parameters alone — never the body's
+bindings — so a spec cannot name a bi-local, and Core's own pre/postconditions
+are what they become. That is what gives `old x` its meaning: the entry value of
+an `inout` parameter. A claim about a bi-local belongs in an `Assert { R }` in
+the body, where it is checked where it stands. -/
 def lower_biproc (mode : Mode) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext) (top : TransBindings)
-    (params : Arg) (reqs : Arg) (body : Arg) (ens : Arg) :
+    (params : Arg) (reqs : Arg) (ens : Arg) (body : Arg) :
     TransM (@Lambda.LMonoTySignature Unit × @Lambda.LMonoTySignature Unit ×
-            List Core.Statement × Array Message) := do
+            Core.Procedure.Spec × List Core.Statement × Array Message) := do
   match body with
   | .seq _ _ bicommands =>
     let (inputs, outputs, ps, top) ← lower_params mode top params
-    -- `requires` is scoped to the parameters, not the body: a precondition can
-    -- name what the caller supplies and nothing the body declares.
-    let (pre, preDiags) ← lower_spec_clauses mode p ictx top ps "requires" true reqs
+    let (pre, preDiags) ← lower_spec_clauses mode p ictx top ps "requires" reqs
+    let (post, postDiags) ← lower_spec_clauses mode p ictx top ps "ensures" ens
     let mut st : BodyState := { bindings := top, declared := ps }
     for bicommand in bicommands do
       st ← lower_bicommand mode p ictx st bicommand
-    let done := st
-    let (post, postDiags) ←
-      lower_spec_clauses mode p ictx done.bindings done.declared "ensures" false ens
-    return (inputs, outputs, (pre ++ done.out ++ post).toList,
-            done.diagnostics ++ preDiags ++ postDiags)
+    return (inputs, outputs, { preconditions := pre, postconditions := post },
+            st.out.toList, st.diagnostics ++ preDiags ++ postDiags)
   | _ => TransM.error "biproc body is not a sequence of bicommands"
 
 /-- Commands that add more than one `freeVars` entry per decl they return, and
@@ -173,9 +174,9 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
   for op in p.commands do
     if misaligning.isEmpty && op.name == q`RelRL.biproc then
       match op.args with
-      | #[.ident _ name, params, reqs, body, ens] =>
-        let ((inputs, outputs, stmts, sourceErrors), errors) :=
-          TransM.run ictx (lower_biproc mode p ictx top params reqs body ens) p.globalContext
+      | #[.ident _ name, params, reqs, ens, body] =>
+        let ((inputs, outputs, spec, stmts, sourceErrors), errors) :=
+          TransM.run ictx (lower_biproc mode p ictx top params reqs ens body) p.globalContext
         for d in sourceErrors do
           emit_diagnostic d
         for e in errors do
@@ -188,7 +189,7 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
         let block : Core.Statement := .block label stmts md
         procs := [.proc
           { header := { name := name, typeArgs := [], inputs := inputs, outputs := outputs },
-            spec := { preconditions := [], postconditions := [] },
+            spec := spec,
             body := .structured [block] } md] :: procs
       | _ =>
         emit_invariant_violation "biproc does not have exactly five arguments"

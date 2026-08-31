@@ -5,7 +5,6 @@
 program RelRL;
 
 biproc aligned
-  ensures { Agree a /\ Agree b }
 =
   |- var a : int := 0; -| ;
   |- var b : int := 0; -| ;
@@ -21,3 +20,6 @@ biproc aligned
   |
     b := 2;
   >> ;
+  // A spec names only what the caller can see, so a claim about bi-locals is an
+  // `Assert` here rather than an `ensures` — docs/design.md.
+  Assert { Agree a /\ Agree b } ;

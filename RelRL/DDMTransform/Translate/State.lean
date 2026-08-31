@@ -98,6 +98,14 @@ def BodyState.declare (s : BodyState) (fr : FileRange) (side : Side)
           Message.withRange fr (collision_message name side core prev) .userError }
     | none => { s with declared := ⟨core, name, side⟩ :: s.declared }
 
+/-- `old x` lowers to an fvar named `"old x"` (`Core.CoreIdent.mkOld`), so a
+check against declared names has to look past the prefix. Priming needs no such
+help: `"old x" ++ "'"` is `"old x'"`, which is the right program's old `x`. -/
+def strip_old (name : String) : String :=
+  if name.startsWith Core.CoreIdent.oldStr then
+    (name.drop Core.CoreIdent.oldStr.length).toString
+  else name
+
 /-- Report any name `stmts` mentions that `side` has nothing declared for. The
 fragment's own declarations count. `declared` also holds split locals from
 earlier bicommands, which are block-scoped by then — so this under-reports
@@ -107,7 +115,8 @@ def BodyState.check_side (s : BodyState) (fr : FileRange) (side : Side)
     (stmts : List Core.Statement) : BodyState :=
   let own := (Imperative.HasVarsImp.definedVars (P := Core.Expression) stmts false).map (·.name)
   let declared := s.declared.filterMap fun d => if d.side == side then some d.source else none
-  (fragment_names stmts).foldl (init := s) fun s name =>
+  (fragment_names stmts).foldl (init := s) fun s n =>
+    let name := strip_old n
     if own.contains name || declared.contains name then s
     else
       { s with diagnostics := s.diagnostics.push <|
@@ -119,7 +128,8 @@ one under its prime. This is also what catches `Agree x` for an `x` neither
 program declares, since that form is built lexically. -/
 def check_formula (declared : List DeclName) (fr : FileRange)
     (e : Core.Expression.Expr) : Array Message :=
-  (expr_names e).foldl (init := #[]) fun ds name =>
+  (expr_names e).foldl (init := #[]) fun ds n =>
+    let name := strip_old n
     if declared.any (·.core == name) then ds
     else
       -- Which program it would have belonged to, for the message. A left name

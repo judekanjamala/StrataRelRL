@@ -41,8 +41,8 @@ procedure aligned ()
     assert [assert_1_2]: b == 0 && b' == 0;
     b := 2;
     |b'| := 2;
-    assert [ensures_1]: a == a';
-    assert [ensures_2]: b == b';
+    assert [assert_2_1]: a == a';
+    assert [assert_2_2]: b == b';
   }
 };
 ```
@@ -61,10 +61,11 @@ Everything the lowering does is visible here:
   pair. It holds one statement, so `a` and `b` are two of them.
 - The right side's statements are primed: `a` → `a'`, `b` → `b'`. The left side
   is never touched.
-- The `ensures` formula became Core `assert`s appended after both sides. Its
-  top-level `/\` was split, so `Agree a /\ Agree b` is two obligations rather
-  than one — labelled `ensures_1`, `ensures_2`, since a relational formula
-  carries no label of its own.
+- Each `Assert { R }` became Core `assert`s where it stands. Its top-level
+  `/\` was split, so `Agree a /\ Agree b` is two obligations rather than one —
+  labelled `assert_2_1`, `assert_2_2`, since a relational formula carries no
+  label of its own. A `requires`/`ensures` would instead appear in a Core
+  `spec { … }` above the body; `Params.relrl.st` shows that.
 
 ## A printing quirk
 

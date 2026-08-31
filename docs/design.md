@@ -80,9 +80,9 @@ are rejected by the parser:
 - **`|- … -|` declares a bi-local, and a spec can name what outlives the body.**
   A synchronized bicommand holds one statement — WhyRel's is
   `LEFT_SYNC atomic_command RIGHT_SYNC` — and carries `@[scope(c)]`, so its
-  declarations outlive it and reach both later bicommands and the `ensures`
-  clause (which carries `@[scope(body)]`); `Var` does the same through
-  `@[scope(l)]`/`@[scope(r)]`. What is distinctive is the lowering: the one
+  declarations outlive it and reach later bicommands, including an
+  `Assert { R }`; `Var` does the same through `@[scope(l)]`/`@[scope(r)]`. A
+  spec cannot name them — it is scoped to the parameters. What is distinctive is the lowering: the one
   statement is lowered once and emitted twice — unprimed on the left, primed on
   the right — so `|- var a : int := 0; -|` declares the *pair* `a`/`a'` from one
   source name.
@@ -216,22 +216,22 @@ are rejected by the parser:
   lands between the two aligned steps, not after both. The same `Agree a` in the
   `ensures` passes, which is exactly the alignment being observable.
 
-- **Specs sit above the body, and the two clauses differ in scope.** Boogie and
-  WhyRel both write `requires`/`ensures` between the signature and the body, and
-  both allow repeats, so RelRL does too. What matters is that they are not
-  symmetric:
+- **Specs sit above the body, and both clauses are scoped to the parameters.**
+  Boogie and WhyRel both write `requires`/`ensures` between the signature and
+  the body, and both allow repeats, so RelRL does too. Both carry
+  `@[scope(params)]`: a spec names what the caller can see — the parameters and
+  the file's top-level declarations — and never what the body declares.
 
-  `requires` is assumed on entry, when the body has declared nothing, so it
-  carries `@[scope(params)]` and elaborates in the biproc's incoming scope plus
-  its parameters. Naming a bi-local in it is a scope error, correctly: the
-  variable does not exist yet. `ensures` is asserted on exit, so it carries
-  `@[scope(body)]` and can name bi-locals as well.
+  That is what lets them become Core's own `preconditions`/`postconditions`
+  rather than an `assume` at the top of the body and an `assert` at the bottom.
+  The two are equivalent for a biproc verified on its own, but only a real
+  postcondition gives `old x` its meaning, since Core snapshots an `inout`
+  parameter's entry value for exactly that. It is also the contract a call
+  between biprocs would read, if one is ever added.
 
-  `ens` is declared *after* `body` in the operator's argument list so that
-  `@[scope(body)]` can refer back to it, while the syntax still prints and
-  parses it before the body. DDM elaborates arguments in declaration order and
-  the syntax string may reference them in any order, so the two are free to
-  disagree.
+  A claim about a bi-local is an `Assert { R }` in the body instead, which is
+  strictly more expressive: it is checked where it stands rather than only at
+  the end. `SeqBi.relrl.st` and `Assertions.relrl.st` are written that way.
 
 - **Top-level Core commands are translated in one pass, not one at a time.** A
   `.fvar i` in Core's AST is an index into the program's top-level declarations,

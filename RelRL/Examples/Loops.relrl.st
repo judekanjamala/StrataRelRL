@@ -7,7 +7,6 @@ program RelRL;
 // Lockstep. One Core loop drives both sides; the `lockstep` invariant, that the
 // two guards agree, is what makes that faithful.
 biproc lockstep
-  ensures { Agree s }
 =
   |- var n : int; -| ;
   |- var s : int := 0; -| ;
@@ -18,12 +17,12 @@ biproc lockstep
     << s := int.add(s, n); n := int.sub(n, 1);
     |  s := int.add(s, n); n := int.sub(n, 1); >> ;
   done ;
+  Assert { Agree s } ;
 
 // Alignment guards let one side step alone: `<| true <] | <| true <]` permits
 // either, so this runs the left to completion and then the right. The loop
 // carries an `align` invariant ruling out a state where neither side may step.
 biproc aligned
-  ensures { i =:= j }
 =
   Var i : int | j : int ;
   << i := 0; | j := 0; >> ;
@@ -32,11 +31,11 @@ biproc aligned
     invariant { [> int.le(j, 4) |> }
     << i := int.add(i, 1); | j := int.add(j, 1); >> ;
   done ;
+  Assert { i =:= j } ;
 
 // One-sided: a loop only the left program runs. The body still names both
 // sides, and it is the body that says the right one stands still.
 biproc left_only
-  ensures { i =:= j }
 =
   Var i : int | j : int ;
   << i := 0; | j := 4; >> ;
@@ -44,9 +43,9 @@ biproc left_only
     invariant { <| int.le(i, 4) <] }
     << i := int.add(i, 1); | >> ;
   done ;
+  Assert { i =:= j } ;
 
 biproc right_only
-  ensures { i =:= j }
 =
   Var i : int | j : int ;
   << i := 4; | j := 0; >> ;
@@ -54,3 +53,4 @@ biproc right_only
     invariant { [> int.le(j, 4) |> }
     << | j := int.add(j, 1); >> ;
   done ;
+  Assert { i =:= j } ;

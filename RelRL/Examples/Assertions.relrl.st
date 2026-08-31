@@ -12,25 +12,9 @@ const bound : int;
 axiom [bound_pos]: int.gt(bound, 0);
 
 biproc sum
-  // Assumed on entry, so it sees only top-level declarations — the body has
-  // declared nothing yet.
+  // A spec names the parameters and the file's top-level declarations, never a
+  // bi-local; `bound` is shared by both sides, so it is nameable here.
   requires { Both (int.gt(bound, 0)) }
-  ensures {
-    // `Agree x` — the two sides' `x` hold the same value.
-    Agree s
-    // `Both (e)` — `e` of the left state, and of the right.
-    /\ Both (int.gt(s, 0))
-    // One state only: `<| e <]` the left, `[> e |>` the right.
-    /\ <| last == 3 <]
-    /\ [> last == 1 |>
-    // `l =:= r` relates a left expression to a right one.
-    /\ last =:= int.add(int.mul(last, 2), 1)
-    /\ Agree a /\ Agree b /\ Agree c
-    // `~`, `\/`, `=>` and `<=>`; `{ … }` groups, since `( … )` groups a Core
-    // expression.
-    /\ { ~ Agree last => { Agree s \/ [> s == 0 |> } }
-    /\ { Agree s <=> Both (s == 6) }
-  }
 =
   // Bi-locals: one name in the source, the pair `s`/`s'` in the translation.
   |- var a : int := 1; -| ;
@@ -53,3 +37,22 @@ biproc sum
     s := int.add(s, a);
     last := a;
   >> ;
+
+  // Every form, on bi-locals — which is why this is an `Assert` in the body and
+  // not an `ensures`.
+  Assert {
+    // `Agree x` — the two sides' `x` hold the same value.
+    Agree s
+    // `Both (e)` — `e` of the left state, and of the right.
+    /\ Both (int.gt(s, 0))
+    // One state only: `<| e <]` the left, `[> e |>` the right.
+    /\ <| last == 3 <]
+    /\ [> last == 1 |>
+    // `l =:= r` relates a left expression to a right one.
+    /\ last =:= int.add(int.mul(last, 2), 1)
+    /\ Agree a /\ Agree b /\ Agree c
+    // `~`, `\/`, `=>` and `<=>`; `{ … }` groups, since `( … )` groups a Core
+    // expression.
+    /\ { ~ Agree last => { Agree s \/ [> s == 0 |> } }
+    /\ { Agree s <=> Both (s == 6) }
+  } ;

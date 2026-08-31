@@ -113,13 +113,13 @@ category BiBindings;
 @[scope(r)]
 op bi_bindings (l : Bindings, @[scope(l)] r : Bindings) : BiBindings => l " |" r;
 
-// `requires` sees the parameters but not the body; `ensures` sees both. That
-// asymmetry is the point of the split — docs/design.md. DDM
-// elaborates arguments in declaration order, not syntax order.
+// Both clauses are scoped to the parameters: a spec names what the caller can
+// see, never what the body declares. They become Core's own pre/postconditions,
+// which is what makes `old x` mean the entry value — docs/design.md.
 op biproc (name : Ident, params : Option BiBindings,
            @[scope(params)] reqs : Seq RelRequires,
-           @[scope(params)] body : Seq Bicommand,
-           @[scope(body)] ens : Seq RelEnsures) : Command =>
+           @[scope(params)] ens : Seq RelEnsures,
+           @[scope(params)] body : Seq Bicommand) : Command =>
   "biproc " name params reqs ens " =\n  " indent(2, body);
 
 #end

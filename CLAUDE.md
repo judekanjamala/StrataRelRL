@@ -21,7 +21,7 @@ lake exe relrl verify RelRL/Examples/Swap.relrl.st        # expect 6/6 passed
 lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 4/4 passed
 lake exe relrl verify RelRL/Examples/Branching.relrl.st   # expect 5/5 passed
 lake exe relrl verify RelRL/Examples/Loops.relrl.st       # expect 20/20 passed
-lake exe relrl verify RelRL/Examples/Params.relrl.st      # expect 3/3 passed
+lake exe relrl verify RelRL/Examples/Params.relrl.st      # expect 4/4 passed
 lake exe relrl toCore RelRL/Examples/Swap.relrl.st        # print the translated Core program
 lake exe relrl project RelRL/Examples/Swap.relrl.st --side left   # one side alone, as Core
 ```
@@ -97,6 +97,11 @@ points at the `issues.md` section that explains it.
   closes with `-|` rather than WhyRel's `_|`. The opener `|_` would have been
   fine; only the closer is unreachable.
 
+- **A spec keyword takes exactly one space.** The grammar's literal is
+  `"\n  ensures { "`, so aligning `ensures` under `requires` with two spaces is a
+  parse error — reported as `unexpected token 'ensures'; expected '='`, which
+  points at nothing useful.
+
 - **Don't let a delimiter glue onto `;`.** An atom written `" };"` registers
   `};` as a *single* token, which then swallows the `}` `;` of any other
   construct. Write `" } ;"`, `">> ;"`, `"-| ;"`. The failure reads
@@ -110,9 +115,11 @@ In `RelRL/DDMTransform/Grammar.lean`, a bicommand's sides are sequences of Core
 `Statement`, **not** `Command`, and `Bicommand` is not a `Command`:
 
 ```
-op biproc (name : Ident, reqs : Seq RelRequires, body : Seq Bicommand,
-           @[scope(body)] ens : Seq RelEnsures) : Command =>
-  "biproc " name reqs ens " =\n  " indent(2, body);
+op biproc (name : Ident, params : Option BiBindings,
+           @[scope(params)] reqs : Seq RelRequires,
+           @[scope(params)] ens : Seq RelEnsures,
+           @[scope(params)] body : Seq Bicommand) : Command =>
+  "biproc " name params reqs ens " =\n  " indent(2, body);
 op bi_embed (left : NewlineSepBy Statement, right : NewlineSepBy Statement) : Bicommand =>
   "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>> ;";
 ```
@@ -136,7 +143,7 @@ obligation the other raised at an earlier step, and nothing reports it.
 `@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
 bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`,
 `@[scope(right)]` plus `@[scope(left)]` on its right side do it for a split, and
-`@[scope(body)]` on `rel` is what puts all of them in scope for `ensures`.
+and a spec is scoped to the parameters, so it never sees any of them.
 `Translate/Bicommands.lean` mirrors that chain by hand when it threads Core's
 `TransBindings` from one side to the next. If the two drift, a de Bruijn index
 resolves against the wrong binding list and Core aborts with `translateExpr

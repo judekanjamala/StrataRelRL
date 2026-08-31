@@ -6,6 +6,7 @@ program RelRL;
 
 // WhyRel's `meth f (self:K, k:int)`, which writes `self.a`. With no heap, the
 // field it writes is an `out` parameter instead.
+
 procedure f (k : int, out a : int)
   spec {
     ensures a == k;

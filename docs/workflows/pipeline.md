@@ -67,11 +67,11 @@ order, with `Translate.lean` importing them:
   side's names, and hands back both as `DeclName`s so the per-side checks treat
   a parameter as declared. Under `project` only the kept side survives,
   unprimed.
-- `lower_biproc` emits the `requires` assumptions, then the body, then the
-  `ensures` obligations. `requires` is lowered against the *incoming* bindings,
-  matching its lack of `@[scope(…)]`; `ensures` against the bindings the body
-  ends with. `lower_spec_clauses` handles both, differing only in `assume`
-  versus `assert`.
+- `lower_biproc` produces the procedure's signature, its contract and its body.
+  Both spec clauses are lowered against the parameters alone — never the body's
+  bindings — and become Core's `preconditions`/`postconditions`, so a spec
+  cannot name a bi-local and `old x` means an `inout` parameter's entry value.
+  `lower_spec_clauses` handles both, differing only in which field they land in.
 - Over the body, `lower_biproc` folds `lower_bicommand`, accumulating a
   `BodyState`: the bindings, what has been declared on each side, and one output
   stream. `BodyState.emit` appends a bicommand's left statements and then its
@@ -117,8 +117,9 @@ order, with `Translate.lean` importing them:
   become Core's own `boolAndOp`, `boolOrOp`, `boolImpliesOp`, `boolEquivOp`,
   `boolNotOp`. `top_conjuncts` peels a top-level `/\` first, so each conjunct
   becomes its own `assert`.
-- `lower_spec_clauses` does the same for the `requires`/`ensures` clauses:
-  `assume`s before the body, `assert`s after it.
+- `lower_spec_clauses` does the same for the `requires`/`ensures` clauses, which
+  become `Core.Procedure.Check`s in the procedure's `spec` rather than
+  statements in its body.
 - Translation runs in `TranslateM` (a `StateM` over an `Array Message`), so
   broken invariants produce diagnostics rather than panics, and source positions
   survive via `Imperative.MetaData.ofSourceRange`. Core's own error strings from
