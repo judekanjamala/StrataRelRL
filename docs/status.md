@@ -109,18 +109,29 @@
 - A standalone `relrl` CLI (`verify`, `toCore`, `project`) with no `Strata-CLI`
   dependency
 
-## Where to pick up
+## Yet to implement
 
-Ordered by cost, not by importance — correct this if the priorities are wrong.
+Everything open, most consequential first. Each names the file to start in;
+[`issues.md`](issues.md) has the mechanism for the two defects.
 
-**A heap model is the next thing.** Everything in
-[Not implemented](#not-implemented) below needs one, and nothing above it does:
-the forall-forall fragment without a heap is complete, from `Var` through the
-loop bicommands to parameters and unary calls.
+1. **Give each program its own globals.** A top-level declaration is currently
+   one symbol both sides read, so agreement on anything derived from it is free.
+   Each should get a primed copy, as every bi-local does — a defect, not a
+   deliberate divergence. `Translate/Priming.lean` and `Translate/Program.lean`;
+   [`issues.md`](issues.md) has the two routes and which declaration kinds are
+   affected.
 
-One loose end, not urgent: the `datatype` misalignment
-([`issues.md`](issues.md)) is contained by a guard rather than fixed. Fixing it
-upstream would let `misaligning_command?` be deleted.
+2. **A heap model.** Everything under [Not implemented](#not-implemented) needs
+   one, and nothing above it does: the forall-forall fragment without a heap is
+   complete, from `Var` through the loop bicommands to parameters and unary
+   calls. Laurel's `HeapParameterization` is the reference — a `Heap` datatype
+   over Core's own `Map` and datatypes, threaded as a parameter.
+
+3. **Fix the `datatype` binding-list misalignment upstream.** Contained by
+   `misaligning_command?` in `Translate/Program.lean` rather than fixed; the fix
+   is to have Core's `translateCoreDecls` return its final `TransBindings`,
+   after which the guard can be deleted. Not urgent — the guard refuses the
+   combination rather than mistranslating it.
 
 ## Differences from WhyRel
 
@@ -197,12 +208,6 @@ first do not need one.
   than an expression, since `x'` is a name lowering invents and DDM has nothing
   to elaborate it against — `docs/design.md`. The translator checks that operand,
   and every other name a side mentions, against what that side declared.
-- **A top-level declaration is shared, not duplicated.** WhyRel gives each side
-  its own state, so a global is two variables; here it is one that both programs
-  read, which makes `Agree` on anything derived from it free. A defect rather
-  than a deliberate divergence — [`issues.md`](issues.md), "A top-level
-  declaration is shared by both programs", has the cause and what fixing it
-  takes.
 - **A top-level `/\` is split** into one obligation per conjunct, for readable
   verifier output. RelRL's own, not WhyRel's.
 
