@@ -47,8 +47,10 @@ program Core;
 procedure aligned ()
 {
   left: {
-    var a : int := 0;
-    var b : int := 0;
+    var a : int;
+    a := 0;
+    var b : int;
+    b := 0;
     a := 1;
     b := 2;
   }
@@ -61,8 +63,10 @@ program Core;
 procedure aligned ()
 {
   right: {
-    var a : int := 0;
-    var b : int := 0;
+    var a : int;
+    a := 0;
+    var b : int;
+    b := 0;
     a := 1;
     b := 2;
   }

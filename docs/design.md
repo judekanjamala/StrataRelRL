@@ -56,8 +56,8 @@ are rejected by the parser:
      trap CLAUDE.md records. Core has no infix `>`, so `>>` cannot collide with
      an expression.
 
-- **Two declaration forms, split by what they declare, not by how they name.**
-  `Var x : T | y : T ;` declares one variable per side, each under its own name,
+- **One declaration form.** `Var x : T | y : T ;` declares one variable per
+  side, each under its own name,
   with either side omittable so a variable can exist in only one program. It is
   WhyRel's `Var x:T | y:T in CC` without the `in CC`, since a bicommand sequence
   is already the scope. Nothing is initialized.
@@ -69,31 +69,29 @@ are rejected by the parser:
   but it never has to: priming is applied by syntactic side, after elaboration,
   so a right-hand fragment is renamed whichever binding its `i` resolved to.
 
-  What separates the forms is not scope — both carry `@[scope(…)]`, so both
-  outlive their bicommand — but what they declare. `Var` declares two variables
-  that happen to be written together, each nameable only from its own side.
-  `|- var i : T; -| ;` declares *one* thing: a bi-local, one statement run by
-  both programs, whose two Core variables the translator supplies from a single
-  source name. Only the second gives a name that `Agree i` and `Both (p)` can
-  read, since only it asserts that both programs have this variable.
+  Writing the same name on both sides is therefore how you say *both programs
+  have this variable*, which is what `Agree i` and `Both (p)` need; writing
+  different names says they do not. Nothing is initialized either way, so
+  `|- i := 0; -| ;` after the declaration is the idiom — see the next entry for
+  why that form cannot declare.
 
-- **`|- … -|` declares a bi-local, and a spec can name what outlives the body.**
-  A synchronized bicommand holds one statement — WhyRel's is
-  `LEFT_SYNC atomic_command RIGHT_SYNC` — and carries `@[scope(c)]`, so its
-  declarations outlive it and reach later bicommands, including an
-  `Assert { R }`; `Var` does the same through `@[scope(l)]`/`@[scope(r)]`. A
-  spec cannot name them — it is scoped to the parameters. What is distinctive is the lowering: the one
-  statement is lowered once and emitted twice — unprimed on the left, primed on
-  the right — so `|- var a : int := 0; -|` declares the *pair* `a`/`a'` from one
-  source name.
+- **Only `Var` extends the scope.** `@[scope(l)]`/`@[scope(r)]` are the only
+  scope annotations on a bicommand; `bi_sync` and `bi_embed` carry none, so a
+  `var` written inside either is scoped to that bicommand and cannot be named
+  after it. WhyRel draws the line in the same place: its `|_ … _|` holds an
+  `atomic_command`, and that grammar has no declaration form — declarations are
+  `Bivardecl` only.
 
-  A split exports too, through `@[scope(right)]` on `bi_embed` and
-  `@[scope(left)]` on its right side, so a later bicommand can name what a split
-  declared. That the right side is elaborated in the left's context is harmless:
-  a reference resolves to a binding under the name it was written with, and
-  priming by syntactic side sends a right-hand one to its primed copy. Naming
-  the *other* program's variable is caught by `BodyState.check_side` rather than
-  by DDM, for the reason in the next entry.
+  What `|- … -|` is *for* is the lowering: one statement, lowered once and
+  emitted twice — unprimed on the left, primed on the right — so
+  `|- a := 0; -|` assigns each program's own copy. Pairing a name comes from
+  `Var a : T | a : T ;`, whose two sides prime apart into `a` and `a'`.
+
+  Because nothing but `Var` exports, a reference in a later bicommand resolves
+  against `Var`'s bindings alone, and there is no case where the right side is
+  elaborated in the left's context. Naming the *other* program's variable is
+  still possible through an assignment target, which DDM does not resolve, and
+  `BodyState.check_side` reports that — for the reason in the next entry.
 
 - **The translator scope-checks each side, because DDM cannot.** DDM threads one
   linear typing context through elaboration, and `@[scope(…)]` chooses *which*

@@ -8,8 +8,9 @@ program RelRL;
 // guards are proved equal first — the `if_guards_1` obligation below.
 biproc agreeing
 =
-  |- var n : int; -| ;
-  |- var r : int := 0; -| ;
+  Var n : int | n : int ;
+  Var r : int | r : int ;
+  |- r := 0; -| ;
   Assume { Agree n } ;
   If int.gt(n, 0) | int.gt(n, 0) then
     << r := 1; | r := 1; >> ;
@@ -21,8 +22,9 @@ biproc agreeing
 // The else-less form, as WhyRel writes it.
 biproc no_else
 =
-  |- var n : int; -| ;
-  |- var r : int := 0; -| ;
+  Var n : int | n : int ;
+  Var r : int | r : int ;
+  |- r := 0; -| ;
   Assume { Agree n } ;
   If int.gt(n, 0) | int.gt(n, 0) then
     << r := 1; | r := 1; >> ;

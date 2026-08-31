@@ -54,11 +54,13 @@ op bi_var_left (l : DeclList) : Bicommand => "Var " l " |" " ;";
 @[scope(r)]
 op bi_var_right (r : DeclList) : Bicommand => "Var" " | " r " ;";
 
-@[scope(c)]
+// Neither declares: only `Var` extends the scope, as in WhyRel, where a
+// `|- … -|` holds an `atomic_command` and that grammar has no declaration form.
+// So no `@[scope(…)]` here, and `Translate/Bicommands.lean` does not thread
+// bindings out of either — CLAUDE.md, "The other invariant".
 op bi_sync (c : Statement) : Bicommand => "|- " c " -|" " ;";
-@[scope(right)]
 op bi_embed (left : NewlineSepBy Statement,
-             @[scope(left)] right : NewlineSepBy Statement) : Bicommand =>
+             right : NewlineSepBy Statement) : Bicommand =>
   "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>>" " ;";
 
 op bi_if (lg : bool, rg : bool, thn : Seq Bicommand, els : Seq Bicommand) : Bicommand =>

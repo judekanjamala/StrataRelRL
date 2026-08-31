@@ -6,8 +6,10 @@ program RelRL;
 
 biproc aligned
 =
-  |- var a : int := 0; -| ;
-  |- var b : int := 0; -| ;
+  Var a : int | a : int ;
+  |- a := 0; -| ;
+  Var b : int | b : int ;
+  |- b := 0; -| ;
   <<
     a := 1;
   |

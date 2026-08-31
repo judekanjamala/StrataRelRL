@@ -150,12 +150,11 @@ obligation the other raised at an earlier step, and nothing reports it.
 
 ## The other invariant: scope chain and binding threading must agree
 
-`@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
-bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`,
-`@[scope(right)]` plus `@[scope(left)]` on its right side do it for a split, and
-and a spec is scoped to the parameters, so it never sees any of them.
-`Translate/Bicommands.lean` mirrors that chain by hand when it threads Core's
-`TransBindings` from one side to the next. If the two drift, a de Bruijn index
+`@[scope(l)]`/`@[scope(r)]` on the `Var` forms are the only scope annotations on
+a bicommand: nothing else extends the scope, and a spec is scoped to the
+parameters, so it never sees a bi-local at all. `Translate/Bicommands.lean`
+mirrors that by hand — it threads Core's `TransBindings` out of the `Var` forms
+and out of nothing else. If the two drift, a de Bruijn index
 resolves against the wrong binding list and Core aborts with `translateExpr
 out-of-range bound variable` — not a type error, and not at the line you
 changed. Change one, change the other.

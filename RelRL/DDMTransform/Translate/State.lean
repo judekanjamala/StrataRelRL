@@ -49,6 +49,11 @@ structure DeclName where
   core : String
   source : String
   side : Side
+  /-- Whether a *later* bicommand may name it. True for parameters and `Var`,
+  false for what a `|- … -|` or a split declares — those are scoped to their own
+  bicommand, so they are recorded for uniqueness in the fused block but must not
+  satisfy a later reference. -/
+  outlives : Bool
 
 /-- `verify` fuses the two sides by self-composition; `project` keeps one of them
 as a unary program, unprimed and stripped of relational formulas
@@ -89,14 +94,14 @@ def collision_message (name : String) (side : Side) (core : String) (prev : Decl
 holds. Only `.verify` fuses; a projection is one unary program, which Core
 checks on its own. -/
 def BodyState.declare (s : BodyState) (fr : FileRange) (side : Side)
-    (names : List String) : BodyState :=
+    (outlives : Bool) (names : List String) : BodyState :=
   names.foldl (init := s) fun s name =>
     let core := side.core_name name
     match s.declared.find? (·.core == core) with
     | some prev =>
       { s with diagnostics := s.diagnostics.push <|
           Message.withRange fr (collision_message name side core prev) .userError }
-    | none => { s with declared := ⟨core, name, side⟩ :: s.declared }
+    | none => { s with declared := ⟨core, name, side, outlives⟩ :: s.declared }
 
 /-- `old x` lowers to an fvar named `"old x"` (`Core.CoreIdent.mkOld`), so a
 check against declared names has to look past the prefix. Priming needs no such
@@ -114,7 +119,8 @@ to replace a Core error with a better one. -/
 def BodyState.check_side (s : BodyState) (fr : FileRange) (side : Side)
     (stmts : List Core.Statement) : BodyState :=
   let own := (Imperative.HasVarsImp.definedVars (P := Core.Expression) stmts false).map (·.name)
-  let declared := s.declared.filterMap fun d => if d.side == side then some d.source else none
+  let declared := s.declared.filterMap fun d =>
+    if d.side == side && d.outlives then some d.source else none
   (fragment_names stmts).foldl (init := s) fun s n =>
     let name := strip_old n
     if own.contains name || declared.contains name then s
@@ -130,7 +136,7 @@ def check_formula (declared : List DeclName) (fr : FileRange)
     (e : Core.Expression.Expr) : Array Message :=
   (expr_names e).foldl (init := #[]) fun ds n =>
     let name := strip_old n
-    if declared.any (·.core == name) then ds
+    if declared.any (fun d => d.core == name && d.outlives) then ds
     else
       -- Which program it would have belonged to, for the message. A left name
       -- spelled with a prime is rejected earlier, by the collision check.

@@ -59,12 +59,13 @@
   `WhileL e` / `WhileR e` drive the loop from one side.
   `RelRL/Examples/Loops.relrl.st`.
 - **`Assume { R }`**, the dual of `Assert { R }`, lowering to Core's `assume`.
-- **Synchronized bicommands declare bi-locals.** `|- var a : int := 0; -|` runs
-  on both sides and declares the *pair* `a`/`a'` from one source name. It holds
-  exactly one statement, as WhyRel's does, so declaring two bi-locals is two
-  synchronized bicommands. What is distinctive is the *pair* from one name:
-  `Var` and a split's own `var` declarations outlive their bicommand too, and
-  are equally nameable by a later bicommand. No spec can name any of them.
+- **`Var` is the only form that declares.** Nothing else extends the scope: a
+  `|- … -|` holds one statement run by both programs, and a split's sides hold
+  statements, so a `var` written in either is scoped to that bicommand and
+  unusable after it. WhyRel draws the same line — its `|_ … _|` takes an
+  `atomic_command`, a grammar with no declaration form. `Var a : int | a : int ;`
+  is how you get the pair `a`/`a'`; `|- a := 0; -| ;` then initializes it. No
+  spec can name either — a spec is scoped to the parameters.
 - **Relational assertions**, in a two-layer language ported from RelRL's
   `rformula` — as an `Assert { R }` anywhere in the body, seeing both sides as
   they stand at that point, or as `requires`/`ensures` clauses above the body,

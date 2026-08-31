@@ -84,7 +84,7 @@ def lower_params (mode : Mode) (top : TransBindings) (params : Arg) :
       let prime (sig : @Lambda.LMonoTySignature Unit) : @Lambda.LMonoTySignature Unit :=
         sig.map fun (id, ty) => (⟨id.name ++ "'", ()⟩, ty)
       let names (side : Side) (sig : @Lambda.LMonoTySignature Unit) : List DeclName :=
-        sig.map fun (id, _) => ⟨side.core_name id.name, id.name, side⟩
+        sig.map fun (id, _) => ⟨side.core_name id.name, id.name, side, true⟩
       let declared := names .left li ++ names .left lo ++ names .right ri ++ names .right ro
       match mode with
       | .verify => return (li ++ prime ri, lo ++ prime ro, declared, b)

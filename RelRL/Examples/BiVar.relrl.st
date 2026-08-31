@@ -1,6 +1,6 @@
-// The two declaration forms: `Var`, one variable per side under its own name
-// (either side omittable, nothing initialized), and `|- … -| ;`, one bi-local
-// whose pair the translator supplies. What separates them: docs/design.md.
+// `Var` is the only form that declares: one variable per side under its own
+// name, either side omittable, nothing initialized. Why nothing else extends
+// the scope: docs/design.md.
 
 program RelRL;
 
@@ -32,11 +32,11 @@ biproc repeated
   >> ;
   Assert { <| n == 1 <] /\ [> n == 2 |> } ;
 
-// The synchronized form instead declares the *pair* `n`/`n'` from one source
-// name, which is what `Agree n` needs: one variable both programs have.
+// The same name on both sides is the pair `n`/`n'` — one variable each program
+// has, which is what `Agree n` needs.
 biproc shared
 =
-  |- var n : int; -| ;
+  Var n : int | n : int ;
   <<
     n := 1;
   |

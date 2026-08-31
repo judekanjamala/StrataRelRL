@@ -8,8 +8,9 @@ program RelRL;
 // two guards agree, is what makes that faithful.
 biproc lockstep
 =
-  |- var n : int; -| ;
-  |- var s : int := 0; -| ;
+  Var n : int | n : int ;
+  Var s : int | s : int ;
+  |- s := 0; -| ;
   Assume { Agree n } ;
   While int.gt(n, 0) | int.gt(n, 0) do
     invariant { Agree n }

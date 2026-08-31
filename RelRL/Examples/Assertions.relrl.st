@@ -17,12 +17,18 @@ biproc sum
   // is wrong and what it would take to give each its own.
   requires { Both (int.gt(bound, 0)) }
 =
-  // Bi-locals: one name in the source, the pair `s`/`s'` in the translation.
-  |- var a : int := 1; -| ;
-  |- var b : int := 2; -| ;
-  |- var c : int := 3; -| ;
-  |- var s : int := 0; -| ;
-  |- var last : int := 0; -| ;
+  // `Var` is the only form that declares; `|- … -| ;` runs one statement on
+  // both sides, so it does the initializing.
+  Var a : int | a : int ;
+  |- a := 1; -| ;
+  Var b : int | b : int ;
+  |- b := 2; -| ;
+  Var c : int | c : int ;
+  |- c := 3; -| ;
+  Var s : int | s : int ;
+  |- s := 0; -| ;
+  Var last : int | last : int ;
+  |- last := 0; -| ;
 
   // A relational assert sees both sides as they stand at this point.
   Assert { Agree a /\ Agree s } ;

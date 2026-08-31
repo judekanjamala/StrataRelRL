@@ -101,7 +101,7 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       let rnames := top_level_declared rs
       match mode with
       | .verify =>
-        let s := (s.declare (src l) .left (top_level_declared ls)).declare (src r) .right rnames
+        let s := (s.declare (src l) .left true (top_level_declared ls)).declare (src r) .right true rnames
         return { s with
                  bindings := b
                  out := (s.emit ls (prime_stmts (fragment_names rs) rs)).out }
@@ -113,14 +113,14 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       | .project .right => return { s with bindings := b }
       | .project .left => return { (s.emit ls []) with bindings := b }
       | .verify =>
-        let s := s.declare (src l) .left (top_level_declared ls)
+        let s := s.declare (src l) .left true (top_level_declared ls)
         return { (s.emit ls []) with bindings := b }
     | q`RelRL.bi_var_right, #[r] =>
       let (rs, b) ← lower_decl_list p s.bindings r
       let rnames := top_level_declared rs
       match mode with
       | .verify =>
-        let s := s.declare (src r) .right rnames
+        let s := s.declare (src r) .right true rnames
         return { s with
                  bindings := b
                  out := (s.emit [] (prime_stmts (fragment_names rs) rs)).out }
@@ -128,36 +128,32 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       | .project .left => return { s with bindings := b }
     | q`RelRL.bi_sync, #[c] =>
       -- One statement; `lower_side` takes the sequence a split's side is.
-      let (stmts, bindings) ← lower_side p s.bindings (.seq c.ann .newline #[c])
+      let (stmts, _) ← lower_side p s.bindings (.seq c.ann .newline #[c])
       let names := top_level_declared stmts
       match mode with
       | .verify =>
-        -- One source name, declared into both programs.
-        let s := (s.declare (src c) .left names).declare (src c) .right names
+        -- Anything it declares is scoped to this bicommand, but still lands in
+        -- the one fused block, so it has to be unique there.
+        let s := (s.declare (src c) .left false names).declare (src c) .right false names
         -- One statement, run by both programs, so it must resolve in both.
         let s := (s.check_side (src c) .left stmts).check_side (src c) .right stmts
-        return { s with
-                 bindings := bindings
-                 out := (s.emit stmts (prime_stmts (fragment_names stmts) stmts)).out }
-      | .project _ =>
-        return { (s.emit stmts []) with bindings := bindings }
+        return s.emit stmts (prime_stmts (fragment_names stmts) stmts)
+      | .project _ => return s.emit stmts []
     | q`RelRL.bi_embed, #[l, r] =>
       match mode with
       | .verify =>
-        let (ls, b) ← lower_side p s.bindings l
-        let (rs, b) ← lower_side p b r
-        let s := (s.declare (src l) .left (top_level_declared ls)).declare
-                   (src r) .right (top_level_declared rs)
+        let (ls, _) ← lower_side p s.bindings l
+        let (rs, _) ← lower_side p s.bindings r
+        let s := (s.declare (src l) .left false (top_level_declared ls)).declare
+                   (src r) .right false (top_level_declared rs)
         let s := (s.check_side (src l) .left ls).check_side (src r) .right rs
-        return { (s.emit ls (prime_stmts (fragment_names rs) rs)) with bindings := b }
+        return s.emit ls (prime_stmts (fragment_names rs) rs)
       | .project .left =>
-        let (ls, b) ← lower_side p s.bindings l
-        let (_, b) ← lower_side p b r
-        return { (s.emit ls []) with bindings := b }
+        let (ls, _) ← lower_side p s.bindings l
+        return s.emit ls []
       | .project .right =>
-        let (_, b) ← lower_side p s.bindings l
-        let (rs, b) ← lower_side p b r
-        return { (s.emit rs []) with bindings := b }
+        let (rs, _) ← lower_side p s.bindings r
+        return s.emit rs []
     | q`RelRL.bi_if_then, #[lg, rg, thn] =>
       -- WhyRel desugars the else-less form to an empty else; so does this, by
       -- passing an empty sequence on to the same branch.

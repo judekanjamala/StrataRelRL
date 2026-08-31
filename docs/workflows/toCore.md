@@ -31,10 +31,14 @@ program Core;
 procedure aligned ()
 {
   biproc: {
-    var a : int := 0;
-    var |a'| : int := 0;
-    var b : int := 0;
-    var |b'| : int := 0;
+    var a : int;
+    var |a'| : int;
+    a := 0;
+    |a'| := 0;
+    var b : int;
+    var |b'| : int;
+    b := 0;
+    |b'| := 0;
     a := 1;
     |a'| := 1;
     assert [assert_1_1]: a == a';
@@ -56,9 +60,9 @@ Everything the lowering does is visible here:
   pair up, then the two `a := 1` steps, then the `Assert` that relates them.
   Not left-in-full followed by right-in-full; `docs/design.md` says why the
   difference matters.
-- Each synchronized `|- … -|` was emitted **twice**: unprimed as the left
-  side's declaration, primed as the right's. One source name, the bi-local
-  pair. It holds one statement, so `a` and `b` are two of them.
+- Each `Var a : int | a : int ;` became **two** declarations, `a` and `a'` —
+  the pair a bi-local is. Each `|- … -| ;` had its one statement emitted twice,
+  unprimed then primed, which is the `a := 0` / `|a'| := 0` beneath it.
 - The right side's statements are primed: `a` → `a'`, `b` → `b'`. The left side
   is never touched.
 - Each `Assert { R }` became Core `assert`s where it stands. Its top-level
