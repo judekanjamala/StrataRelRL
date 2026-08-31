@@ -1,0 +1,386 @@
+/-
+  Copyright StrataRelRL Contributors
+
+  SPDX-License-Identifier: Apache-2.0 OR MIT
+-/
+
+module
+
+public import RelRL.DDMTransform.Grammar
+public import Strata.Languages.Core.Verifier
+public import Strata.DL.Imperative.MetaData
+public import Strata.Pipeline.Messages
+import StrataDDM.AST
+public import RelRL.DDMTransform.Translate.Formulas
+public import RelRL.DDMTransform.Translate.State
+
+namespace Strata
+namespace RelRL
+
+public section
+
+open StrataDDM (Operation Arg QualifiedIdent)
+
+/-! # Lowering one bicommand
+
+`lower_bicommand` is the fold over a `biproc` body. Every form's binding
+threading mirrors its `@[scope(…)]` in `Grammar.lean` — CLAUDE.md, "The other
+invariant" — and the compound forms recur through `seq_body`. `docs/design.md`
+has each form's lowering and where it comes from in WhyRel. -/
+
+/-- Lower one side's statements. The synthetic `Core.block` wrap is all
+`translateBlock` needs; `bindings` is the scope the side was elaborated in. -/
+def lower_side (p : StrataDDM.Program) (bindings : TransBindings) (arg : Arg) :
+    TransM (List Core.Statement × TransBindings) := do
+  match arg with
+  | .seq ann _ stmts =>
+    translateBlock p bindings
+      (.op { ann, name := q`Core.block, args := #[.seq ann .newline stmts] })
+  | _ => TransM.error "bicommand side is not a statement sequence"
+
+/-- Lower a `Var` side's `DeclList`, by putting it back in the
+`Core.varStatement` Core's grammar wraps it in. Nothing is initialized. -/
+def lower_decl_list (p : StrataDDM.Program) (bindings : TransBindings) (dl : Arg) :
+    TransM (List Core.Statement × TransBindings) := do
+  let ann := dl.ann
+  let stmt : Arg := .op { ann, name := q`Core.varStatement, args := #[.option ann none, dl] }
+  translateBlock p bindings
+    (.op { ann, name := q`Core.block, args := #[.seq ann .newline #[stmt]] })
+
+
+/-- Lower one bicommand, extending the accumulator. Each branch's binding
+threading mirrors that form's `@[scope(…)]` in `Grammar.lean`. Under `project`,
+one side is kept verbatim and nothing is primed or checked for collisions —
+there is only one program, and Core checks it directly. -/
+partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
+    (ictx : Lean.Parser.InputContext) (s : BodyState) (arg : Arg) : TransM BodyState := do
+  match arg with
+  | .op op =>
+    let md := Imperative.MetaData.ofSourceRange (.file ictx.fileName) op.ann
+    -- Each side's own range, so a collision points at the declaration.
+    let src (a : Arg) : FileRange := { file := .file ictx.fileName, range := a.ann }
+    -- A nested bicommand sequence, lowered into its own accumulator: its
+    -- declarations are scoped to the Core block it becomes, so `declared` does
+    -- not come back out. Counters do, to keep labels unique body-wide. `m` is
+    -- a parameter because a `While` with alignment guards lowers its body three
+    -- times — fused, and once per side, for the steps only one side takes.
+    let seq_body (m : Mode) (st : BodyState) (a : Arg) : TransM BodyState := do
+      match a with
+      | .seq _ _ cs =>
+        let mut b : BodyState := { st with out := #[] }
+        for c in cs do
+          b ← lower_bicommand m p ictx b c
+        return b
+      | _ => TransM.error "expected a sequence of bicommands"
+    let keep (outer : BodyState) (b : BodyState) : BodyState :=
+      { outer with asserts := b.asserts, assumes := b.assumes, diagnostics := b.diagnostics }
+    -- `invariant { R }` clauses, labelled for the verifier's output.
+    let invariants (st : BodyState) (tag : String) (a : Arg) :
+        TransM (List (String × Core.Expression.Expr) × Array Message) := do
+      match a with
+      | .seq _ _ cs =>
+        let mut out : List (String × Core.Expression.Expr) := []
+        let mut ds : Array Message := #[]
+        let mut i := 0
+        for c in cs do
+          match c with
+          | .op op =>
+            match op.args with
+            | #[r] =>
+              i := i + 1
+              let e ← lower_rformula p st.bindings r
+              ds := ds ++ check_formula st.declared (src c) e
+              out := out ++ [(s!"{tag}_inv_{i}", e)]
+            | _ => TransM.error "invariant does not hold exactly one relational formula"
+          | _ => TransM.error "invariant is not an operation"
+        return (out, ds)
+      | _ => TransM.error "invariants are not a sequence"
+    match op.name, op.args with
+    | q`RelRL.bi_var, #[l, r] =>
+      let (ls, b) ← lower_decl_list p s.bindings l
+      let (rs, b) ← lower_decl_list p b r
+      let rnames := top_level_declared rs
+      match mode with
+      | .verify =>
+        let s := (s.declare (src l) .left (top_level_declared ls)).declare (src r) .right rnames
+        return { s with
+                 bindings := b
+                 out := (s.emit ls (prime_stmts (fragment_names rs) rs)).out }
+      | .project .left => return { (s.emit ls []) with bindings := b }
+      | .project .right => return { (s.emit rs []) with bindings := b }
+    | q`RelRL.bi_var_left, #[l] =>
+      let (ls, b) ← lower_decl_list p s.bindings l
+      match mode with
+      | .project .right => return { s with bindings := b }
+      | .project .left => return { (s.emit ls []) with bindings := b }
+      | .verify =>
+        let s := s.declare (src l) .left (top_level_declared ls)
+        return { (s.emit ls []) with bindings := b }
+    | q`RelRL.bi_var_right, #[r] =>
+      let (rs, b) ← lower_decl_list p s.bindings r
+      let rnames := top_level_declared rs
+      match mode with
+      | .verify =>
+        let s := s.declare (src r) .right rnames
+        return { s with
+                 bindings := b
+                 out := (s.emit [] (prime_stmts (fragment_names rs) rs)).out }
+      | .project .right => return { (s.emit rs []) with bindings := b }
+      | .project .left => return { s with bindings := b }
+    | q`RelRL.bi_sync, #[c] =>
+      -- One statement; `lower_side` takes the sequence a split's side is.
+      let (stmts, bindings) ← lower_side p s.bindings (.seq c.ann .newline #[c])
+      let names := top_level_declared stmts
+      match mode with
+      | .verify =>
+        -- One source name, declared into both programs.
+        let s := (s.declare (src c) .left names).declare (src c) .right names
+        -- One statement, run by both programs, so it must resolve in both.
+        let s := (s.check_side (src c) .left stmts).check_side (src c) .right stmts
+        return { s with
+                 bindings := bindings
+                 out := (s.emit stmts (prime_stmts (fragment_names stmts) stmts)).out }
+      | .project _ =>
+        return { (s.emit stmts []) with bindings := bindings }
+    | q`RelRL.bi_embed, #[l, r] =>
+      match mode with
+      | .verify =>
+        let (ls, _) ← lower_side p s.bindings l
+        let (rs, _) ← lower_side p s.bindings r
+        -- A split's declarations stay local to their side, but they land in the
+        -- one fused block, so they still have to be unique in it.
+        let s := (s.declare (src l) .left (top_level_declared ls)).declare
+                   (src r) .right (top_level_declared rs)
+        let s := (s.check_side (src l) .left ls).check_side (src r) .right rs
+        return s.emit ls (prime_stmts (fragment_names rs) rs)
+      | .project .left =>
+        let (ls, _) ← lower_side p s.bindings l
+        return s.emit ls []
+      | .project .right =>
+        let (rs, _) ← lower_side p s.bindings r
+        return s.emit rs []
+    | q`RelRL.bi_if_then, #[lg, rg, thn] =>
+      -- WhyRel desugars the else-less form to an empty else; so does this, by
+      -- passing an empty sequence on to the same branch.
+      lower_bicommand mode p ictx s
+        (.op { ann := op.ann, name := q`RelRL.bi_if,
+               args := #[lg, rg, thn, .seq op.ann .newline #[]] })
+    | q`RelRL.bi_if, #[lg, rg, thn, els] =>
+      match mode with
+      | .verify =>
+        let lge ← translateExpr p s.bindings lg
+        let rge ← translateExpr p s.bindings rg
+        let rge := prime_expr (expr_names rge) rge
+        -- Both sides are put under *one* Core `if`, which is faithful only
+        -- because the guards are proved to agree first. That obligation is what
+        -- WhyRel's rule for `If` requires to align the two branches at all.
+        -- Take this `If`'s label before lowering the branches, so a nested one
+        -- reads as the later obligation it is.
+        let n := s.asserts + 1
+        let s := { s with
+                   asserts := n
+                   diagnostics := s.diagnostics ++ check_formula s.declared (src lg) lge
+                     ++ check_formula s.declared (src rg) rge }
+        let t ← seq_body mode s thn
+        let e ← seq_body mode (keep s t) els
+        let s := keep s e
+        let guards := bool_app Core.boolEquivOp [lge, rge]
+        return { s with
+                 out := s.out.push (.assert s!"if_guards_{n}" guards md)
+                          |>.push (.ite (.det lge) t.out.toList e.out.toList md) }
+      | .project side =>
+        let g ← translateExpr p s.bindings (match side with | .left => lg | .right => rg)
+        let t ← seq_body mode s thn
+        let e ← seq_body mode (keep s t) els
+        let s := keep s e
+        return { s with out := s.out.push (.ite (.det g) t.out.toList e.out.toList md) }
+    | q`RelRL.bi_if4, #[lg, rg, tt, te, et, ee] =>
+      -- WhyRel's `Biif4`: the guards need not agree, so there is no agreement
+      -- obligation — a branch per combination instead.
+      let lge ← translateExpr p s.bindings lg
+      let rge ← translateExpr p s.bindings rg
+      match mode with
+      | .verify =>
+        let rge := prime_expr (expr_names rge) rge
+        let s := { s with diagnostics := s.diagnostics
+                     ++ check_formula s.declared (src lg) lge
+                     ++ check_formula s.declared (src rg) rge }
+        let a ← seq_body mode s tt
+        let b ← seq_body mode (keep s a) te
+        let c ← seq_body mode (keep s b) et
+        let d ← seq_body mode (keep s c) ee
+        let s := keep s d
+        let notl := bool_app Core.boolNotOp [lge]
+        let notr := bool_app Core.boolNotOp [rge]
+        let inner : Core.Statement :=
+          .ite (.det (bool_app Core.boolAndOp [notl, rge])) c.out.toList d.out.toList md
+        let mid : Core.Statement :=
+          .ite (.det (bool_app Core.boolAndOp [lge, notr])) b.out.toList [inner] md
+        let outer : Core.Statement :=
+          .ite (.det (bool_app Core.boolAndOp [lge, rge])) a.out.toList [mid] md
+        return { s with out := s.out.push outer }
+      | .project side =>
+        -- `annot.ml`'s `projl`/`projr`: one side's guard picks between the two
+        -- branches that agree on that side — then-then against else-then on the
+        -- left, then-then against then-else on the right.
+        let (g, thn, els) := match side with
+          | .left => (lge, tt, et)
+          | .right => (rge, tt, te)
+        let a ← seq_body mode s thn
+        let b ← seq_body mode (keep s a) els
+        let s := keep s b
+        return { s with out := s.out.push (.ite (.det g) a.out.toList b.out.toList md) }
+    | q`RelRL.bi_while, #[lg, rg, la, ra, invs, body] =>
+      -- WhyRel's general `Biwhile`, from `compile_biwhile` in translate.ml:
+      --   while (lg || rg') invariant { align /\ … } {
+      --     if (lg && la) then <left projection>
+      --     else if (rg' && ra) then <right projection, primed>
+      --     else <both sides>
+      --   }
+      -- The alignment condition is an invariant, not an assert: it is what
+      -- rules out a state where one side must step and its guard forbids it.
+      let lge ← translateExpr p s.bindings lg
+      let rge ← translateExpr p s.bindings rg
+      match mode with
+      | .verify =>
+        let rge := prime_expr (expr_names rge) rge
+        let lae ← lower_rformula p s.bindings la
+        let rae ← lower_rformula p s.bindings ra
+        let n := s.asserts + 1
+        let s := { s with asserts := n, diagnostics := s.diagnostics
+                     ++ check_formula s.declared (src lg) lge
+                     ++ check_formula s.declared (src rg) rge
+                     ++ check_formula s.declared (src la) lae
+                     ++ check_formula s.declared (src ra) rae }
+        let (invEs, invDs) ← invariants s s!"while_{n}" invs
+        let s := { s with diagnostics := s.diagnostics ++ invDs }
+        let lock ← seq_body .verify s body
+        let s := keep s lock
+        -- The one-sided steps are this body's projections. Their diagnostics
+        -- would repeat the fused pass's, so only that pass's are kept.
+        let lonly ← seq_body (.project .left) { s with diagnostics := #[] } body
+        let ronly ← seq_body (.project .right) { s with diagnostics := #[] } body
+        let ronlyStmts := prime_stmts (fragment_names ronly.out.toList) ronly.out.toList
+        let lstep := bool_app Core.boolAndOp [lge, lae]
+        let rstep := bool_app Core.boolAndOp [rge, rae]
+        let align := bool_app Core.boolOrOp
+          [bool_app Core.boolOrOp [lstep, rstep],
+           bool_app Core.boolOrOp
+             [bool_app Core.boolAndOp [lge, rge],
+              bool_app Core.boolAndOp
+                [bool_app Core.boolNotOp [lge], bool_app Core.boolNotOp [rge]]]]
+        let inner : Core.Statement :=
+          .ite (.det lstep) lonly.out.toList
+            [.ite (.det rstep) ronlyStmts lock.out.toList md] md
+        let loop : Core.Statement :=
+          .loop (.det (bool_app Core.boolOrOp [lge, rge])) none
+            ((s!"while_{n}_align", align) :: invEs) [inner] md
+        return { s with out := s.out.push loop }
+      | .project side =>
+        let b ← seq_body mode s body
+        let s := keep s b
+        let g := match side with | .left => lge | .right => rge
+        return { s with out := s.out.push (.loop (.det g) none [] b.out.toList md) }
+    | q`RelRL.bi_while_lockstep, #[lg, rg, invs, body] =>
+      -- `compile_lockstep_biwhile`: one guard drives both sides, and the
+      -- `lockstep` invariant is what makes that faithful.
+      let lge ← translateExpr p s.bindings lg
+      let rge ← translateExpr p s.bindings rg
+      match mode with
+      | .verify =>
+        let rge := prime_expr (expr_names rge) rge
+        let n := s.asserts + 1
+        let s := { s with asserts := n, diagnostics := s.diagnostics
+                     ++ check_formula s.declared (src lg) lge
+                     ++ check_formula s.declared (src rg) rge }
+        let (invEs, invDs) ← invariants s s!"while_{n}" invs
+        let s := { s with diagnostics := s.diagnostics ++ invDs }
+        let b ← seq_body mode s body
+        let s := keep s b
+        let lockstep := bool_app Core.boolEquivOp [lge, rge]
+        let loop : Core.Statement :=
+          .loop (.det lge) none (invEs ++ [(s!"while_{n}_lockstep", lockstep)])
+            b.out.toList md
+        return { s with out := s.out.push loop }
+      | .project side =>
+        let b ← seq_body mode s body
+        let s := keep s b
+        let g := match side with | .left => lge | .right => rge
+        return { s with out := s.out.push (.loop (.det g) none [] b.out.toList md) }
+    | q`RelRL.bi_while_left, #[g, invs, body] =>
+      -- `compile_sided_biwhile`. WhyRel reaches this by writing `Biwhile` with
+      -- the other guard false, so one side's guard drives the loop and the body
+      -- is the whole bicommand — the user's body is what says the other side
+      -- stands still. Projecting onto the *other* side gives `while false`,
+      -- which is emitted as nothing.
+      let ge ← translateExpr p s.bindings g
+      match mode with
+      | .verify =>
+        let n := s.asserts + 1
+        let s := { s with
+                   asserts := n
+                   diagnostics := s.diagnostics ++ check_formula s.declared (src g) ge }
+        let (invEs, invDs) ← invariants s s!"while_{n}" invs
+        let s := { s with diagnostics := s.diagnostics ++ invDs }
+        let b ← seq_body mode s body
+        let s := keep s b
+        return { s with out := s.out.push (.loop (.det ge) none invEs b.out.toList md) }
+      | .project .right => return s
+      | .project .left =>
+        let b ← seq_body mode s body
+        let s := keep s b
+        return { s with out := s.out.push (.loop (.det ge) none [] b.out.toList md) }
+    | q`RelRL.bi_while_right, #[g, invs, body] =>
+      let ge ← translateExpr p s.bindings g
+      match mode with
+      | .verify =>
+        let ge := prime_expr (expr_names ge) ge
+        let n := s.asserts + 1
+        let s := { s with
+                   asserts := n
+                   diagnostics := s.diagnostics ++ check_formula s.declared (src g) ge }
+        let (invEs, invDs) ← invariants s s!"while_{n}" invs
+        let s := { s with diagnostics := s.diagnostics ++ invDs }
+        let b ← seq_body mode s body
+        let s := keep s b
+        return { s with out := s.out.push (.loop (.det ge) none invEs b.out.toList md) }
+      | .project .left => return s
+      | .project .right =>
+        let b ← seq_body mode s body
+        let s := keep s b
+        return { s with out := s.out.push (.loop (.det ge) none [] b.out.toList md) }
+    | q`RelRL.bi_assert, #[r] =>
+      match mode with
+      | .project _ => return s
+      | .verify =>
+        let mut out := s.out
+        let mut ds := s.diagnostics
+        let mut i := 0
+        for conjunct in top_conjuncts r do
+          i := i + 1
+          let e ← lower_rformula p s.bindings conjunct
+          ds := ds ++ check_formula s.declared (src arg) e
+          out := out.push (.assert s!"assert_{s.asserts + 1}_{i}" e md)
+        return { s with out := out, asserts := s.asserts + 1, diagnostics := ds }
+    | q`RelRL.bi_assume, #[r] =>
+      -- Same shape as `bi_assert`: it has to observe both sides as they stand,
+      -- `Statement.assume` in place of `.assert`.
+      match mode with
+      | .project _ => return s
+      | .verify =>
+        let mut out := s.out
+        let mut ds := s.diagnostics
+        let mut i := 0
+        for conjunct in top_conjuncts r do
+          i := i + 1
+          let e ← lower_rformula p s.bindings conjunct
+          ds := ds ++ check_formula s.declared (src arg) e
+          out := out.push (.assume s!"assume_{s.assumes + 1}_{i}" e md)
+        return { s with out := out, assumes := s.assumes + 1, diagnostics := ds }
+    | n, args =>
+      TransM.error s!"unexpected bicommand {n.fullName} with {args.size} arguments"
+  | _ => TransM.error "biproc body element is not an operation"
+
+end
+end RelRL
+end Strata

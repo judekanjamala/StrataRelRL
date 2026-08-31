@@ -64,7 +64,8 @@ text names `strata` rather than `relrl`. Fix is upstream)
 | Path | Role |
 | --- | --- |
 | `RelRL/DDMTransform/Grammar.lean` | the `#dialect RelRL … #end` declaration |
-| `RelRL/DDMTransform/Translate.lean` | `StrataDDM.Program` → `Core.Program` |
+| `RelRL/DDMTransform/Translate/` | `StrataDDM.Program` → `Core.Program`, one module per stage |
+| `RelRL/DDMTransform/Translate.lean` | imports the six, so callers see one module |
 | `RelRL/Verify.lean` | translate, then `Strata.Core.verifyProgram` |
 | `RelRL/Cli/Common.lean` | parsing a `.relrl.st` file, diagnostics, exit codes |
 | `RelRL/Cli/Verify.lean` | the `verify` command |

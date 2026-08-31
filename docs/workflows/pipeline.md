@@ -31,7 +31,17 @@ carrying its `SourceRange` and dialect-declared metadata.
 
 ## 2. `StrataDDM.Program` → `Core.Program` (`RelRL.DDMTransform.Translate`)
 
-`RelRL/DDMTransform/Translate.lean` 
+One module per stage under `RelRL/DDMTransform/Translate/`, in dependency
+order, with `Translate.lean` importing them:
+
+| Module | Holds |
+|---|---|
+| `Diagnostics` | `TranslateM` and the `Message` accumulator |
+| `Priming` | which names a fragment mentions, and renaming them apart |
+| `Formulas` | `lower_rformula`, `bool_app`, `top_conjuncts` |
+| `State` | `Side`, `Mode`, `BodyState`, and the per-side and formula checks |
+| `Bicommands` | `lower_bicommand`, the fold over a body |
+| `Program` | specs, parameters, and the top-level walk |
 
 - `translate_program_with` walks each top-level `Operation` in `p.commands`. A
   `RelRL.biproc` becomes a Core procedure *of the same name*, whose body is the
