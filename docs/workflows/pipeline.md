@@ -61,8 +61,8 @@ carrying its `SourceRange` and dialect-declared metadata.
   rights each time one is reached, and again at the end.
 - `lower_bicommand` handles the four forms. `bi_var` / `bi_var_left` /
   `bi_var_right` lower each side's `DeclList` through `lower_decl_list`, which
-  puts it back in the `Core.varStatement` Core's own grammar wraps it in;
-  nothing is primed, since the two names are distinct bindings already. `bi_sync` holds a *single*
+  puts it back in the `Core.varStatement` Core's own grammar wraps it in, and
+  prime the right side's names as every other form does. `bi_sync` holds a *single*
   statement, which it lowers once and emits twice — unprimed left, primed
   right — so one source declaration yields the bi-local pair `a`/`a'`; it is
   also the only form that extends the bindings and the bi-local set. Declaring
@@ -70,6 +70,12 @@ carrying its `SourceRange` and dialect-declared metadata.
   bicommand's own incoming bindings and primes the right against its own
   declarations as well as the bi-locals. `bi_assert` flushes, then emits the
   formula.
+- Each declaring form also records what it declared, under its Core name, in
+  `BodyState.declared`. Self-composition fuses both programs into one Core
+  scope, so that name is what has to be unique; a repeat is a located
+  `.userError` in `BodyState.diagnostics`, which `lower_biproc` returns
+  alongside the statements. Only `.verify` fuses, so `.project` skips the check
+  — one unary program is Core's to check.
 - `prime_stmts` and `prime_expr` are the two halves of priming, both folds over
   Core's own substitution — `Block.substFvar`/`Block.renameLhs` for statements,
   `Lambda.LExpr.substFvar` for expressions — so no traversal of the Core AST is

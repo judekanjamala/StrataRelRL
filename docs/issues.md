@@ -56,6 +56,91 @@ Fix: thread the real dialect map — the one `build_relrl_dialect_file_map`
 already builds — through `translate_program_with`, instead of naming
 `Core_map`. Deferred until a second operator motivates it.
 
+## A `datatype` silently misresolves every later top-level reference
+
+**Unsound.** A `datatype` command anywhere above a `biproc` makes references to
+top-level Core declarations inside that `biproc` resolve to the wrong
+declaration, or to none at all. A reference that lands out of range becomes the
+default `Core.Decl`, which lowers to the literal `0` — so a false spec verifies:
+
+```console
+$ cat unsound.relrl.st
+datatype Box { BoxInt (ival : int) };
+const k : int := 5;
+biproc t
+  ensures { <| a == 0 <] }        // false: a is k, which is 5
+=
+  |- var a : int; -| ;
+  << a := k; | a := k; >> ;
+
+$ relrl verify unsound.relrl.st
+All 1 goals passed.               # exit 0
+```
+
+`toCore` shows the substitution directly — `a := k` came out as `a := 0`:
+
+```
+biproc: { var a : int; a := 0; var |a'| : int; |a'| := 0; assert [ensures_1]: a == 0; }
+```
+
+Delete the `datatype` line and the same file behaves correctly.
+
+The root cause is in `translate_program_with`, which reconstructs Core's
+top-level binding list from the decls `translateCoreDecls` returns:
+
+```lean
+let top : TransBindings := { freeVars := coreDecls.toArray }
+```
+
+That assumes one `freeVars` entry per returned decl. `translateCoreDecls`
+pushes exactly one decl per *command*, but two of its branches grow `freeVars`
+by more:
+
+| Command | decls returned | `freeVars` entries added |
+|---|---|---|
+| `command_datatypes` | 1 | per datatype: the type, then every constructor, tester, field accessor and unsafe field accessor |
+| `command_recfndefs` | 1 | one per function in the block |
+
+Every other branch is 1:1, which is why the defect stayed hidden — no example
+uses either command. A `.fvar i` in a `biproc` body indexes DDM's global
+context, so from the first such command onward `top.freeVars` is shorter than
+the index space and every later index is off. Core's `translateExpr` asserts
+`i < bindings.freeVars.size`, so the run prints a `PANIC` and a backtrace per
+misresolved reference — to **stderr**, where RelRL's CLI does not collect it,
+leaving the exit code to report an ordinary verification result.
+
+The same expressions are fine through a plain Core `procedure` in the same
+file, since those go to `translateCoreDecls` directly and never touch the
+reconstructed list.
+
+**Contained, not fixed.** `misaligning_command?` in `Translate.lean` names the
+two offending commands, and `translate_program_with` refuses the file rather
+than lowering a body against a `top` it knows is short:
+
+```console
+$ relrl verify unsound.relrl.st
+unsound.relrl.st(2, (0-37)) a `datatype` declaration cannot appear in a file that
+also declares a `biproc`: references to top-level declarations inside the biproc
+would silently resolve to the wrong one. docs/issues.md has the mechanism.
+Finished with 0 goals checked, but 1 error(s) occurred.   # exit 1
+```
+
+No body is lowered once it fires — lowering one anyway trips Core's `assert!`
+and buries the message under backtraces. The guard is exact, not conservative:
+a `datatype` in a file with no `biproc` still works (that path never touches the
+reconstructed list), as do a type synonym, an opaque `type`, and a
+*single*-function `rec` block, all of which are 1:1.
+
+The real fix is upstream: have `translateCoreDecls` return its final
+`TransBindings` alongside the decls — it holds them at the end already — and
+have `translate_program_with` use that as `top`. That is correct for every
+command, present and future, and lets the guard be deleted. The dependency is
+unpinned (`rev = "main"`), so it is a patch upstream rather than a fork.
+
+Do not fix it by reimplementing `translateCoreDecls`'s dispatch inside RelRL:
+that duplicates a thirteen-case match against an unpinned dependency, which is
+the drift CLAUDE.md warns about.
+
 ## `Agree x` is lexical, so nothing checks the name until Core does
 
 `Agree x` is the one relational form whose operand is an `Ident` rather than a
@@ -121,29 +206,42 @@ biproc p =
 Annotating it would not help: a split has two sides and one context to export,
 and exporting the left's would make a later *right*-side reference resolve
 against the left's binding. Hoisting into `|- … -|` or `Var` is the answer, and
-between them they cover every case except the next one. The error is clean and
-points at the source, so this is a limitation rather than a trap.
+between them they cover every case. The error is clean and points at the source,
+so this is a limitation rather than a trap.
 
-**The same name cannot be declared on both sides.** `bi_var` elaborates its
-right `DeclList` in the left's context, so a repeated name pushes a second
-binding and the two flatten to two `var n` in one Core block:
+**Assignment targets are not scope-checked**, which partly masks it. Core's
+`Lhs` is `op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may
+*assign* to a name it cannot *read*. Priming is by syntactic side, so a
+right-side assignment to a *bi-local* still lands on the right copy; the case
+below is what escapes.
+
+## A right-side fragment can name a left-only variable
+
+`prime_expr` and `prime_stmts` rename a right-hand fragment against a
+whitelist — the bi-local set — so a name outside it passes through untouched.
+That is right for a top-level Core declaration, which both programs share, and
+wrong for a variable `Var acc : int | ;` gave the left program alone:
 
 ```console
-$ relrl verify samename.relrl.st       # Var n : int | n : int ;
-samename.relrl.st(64-71) ❌ Type checking error.
-Variable n of type int already in context.
+$ cat unsound.relrl.st
+biproc unsound
+  ensures { <| acc == 6 <] }        // a claim about the LEFT state
+=
+  Var acc : int | ;
+  << acc := 0; | acc := 6; >> ;
+
+$ relrl verify unsound.relrl.st
+All 1 goals passed.
 ```
 
-Caught, but by Core against the *translated* program — a character range rather
-than a line and column, exit 3. `|- var n : int; -| ;` is the form for that
-case. The cheap improvement is to reject the same-name `Var` in the translator,
-against its own source range, with a message naming the synchronized form.
+The right program has no `acc`, yet its write is the one that discharges a
+left-state obligation: both sides resolved to the same Core variable. The
+symmetric direction — a left fragment naming a right-only variable — is caught,
+since a left fragment is never primed and the right's name carries the prime, so
+Core sees an undeclared variable.
 
-This is the one place RelRL cannot follow WhyRel's surface syntax, which writes
-`Var i:int | i:int` routinely; `docs/status.md` records the mismatch.
-
-**Assignment targets are not scope-checked**, which partly masks both. Core's
-`Lhs` is `op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may
-*assign* to a name it cannot *read*. The assignment still lands on the right
-variable — priming is by syntactic side, not by resolution — but it is accepted
-for a reason unrelated to it being correct.
+Closing it means priming a right-side fragment against a *blacklist* instead:
+rename every free name except the program's top-level Core declarations, which
+is exactly the set `TransBindings.freeVars` already holds at `lower_biproc`'s
+entry. What that needs first is knowing which names a fragment binds itself,
+which is the scope check Core's lexical `Lhs` does not do.

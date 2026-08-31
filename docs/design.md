@@ -56,35 +56,36 @@ are rejected by the parser:
      trap CLAUDE.md records. Core has no infix `>`, so `>>` cannot collide with
      an expression.
 
-- **Two declaration forms, and which one applies is forced, not chosen.**
-  `Var x : T | y : T ;` declares the two sides' variables under their own names,
+- **Two declaration forms, split by what they declare, not by how they name.**
+  `Var x : T | y : T ;` declares one variable per side, each under its own name,
   with either side omittable so a variable can exist in only one program. It is
   WhyRel's `Var x:T | y:T in CC` without the `in CC`, since a bicommand sequence
-  is already the scope. Nothing is initialized, and nothing is primed: two
-  distinct names are two ordinary bindings, so `s =:= t` relates them directly.
+  is already the scope. Nothing is initialized.
 
-  It cannot express the same name on both sides, which is what WhyRel actually
-  writes most often (`Var i:int | i:int`). One linear DDM typing context cannot
-  hold two bindings called `i` and tell them apart by which side of the `|` a
-  reference sits on. That case is `|- var i : T; -| ;` instead: one binding, and
-  the translator emits the pair `i`/`i'`. So the division between the two forms
-  is exactly the line DDM's scoping draws — differing names are representable
-  directly, a shared name has to be one binding plus priming.
+  The names need not differ: the right side is primed, so `Var i:int | i:int ;`
+  — what WhyRel writes most often — lowers to `i` and `i'` like any other pair.
+  DDM's single linear typing context does end up holding two bindings called
+  `i`, and cannot tell them apart by which side of the `|` a reference sits on,
+  but it never has to: priming is applied by syntactic side, after elaboration,
+  so a right-hand fragment is renamed whichever binding its `i` resolved to.
 
-- **`|- … -|` is what declares, and only bi-locals are in scope for a spec.**
+  What separates the forms is not scope — both carry `@[scope(…)]`, so both
+  outlive their bicommand — but what they declare. `Var` declares two variables
+  that happen to be written together, each nameable only from its own side.
+  `|- var i : T; -| ;` declares *one* thing: a bi-local, one statement run by
+  both programs, whose two Core variables the translator supplies from a single
+  source name. Only the second gives a name that `Agree i` and `Both (p)` can
+  read, since only it asserts that both programs have this variable.
+
+- **`|- … -|` declares a bi-local, and a spec can name what outlives the body.**
   A synchronized bicommand holds one statement — WhyRel's is
-  `LEFT_SYNC atomic_command RIGHT_SYNC` — and is the one form carrying
-  `@[scope(c)]`, so its
+  `LEFT_SYNC atomic_command RIGHT_SYNC` — and carries `@[scope(c)]`, so its
   declarations outlive it and reach both later bicommands and the `ensures`
-  clause (which carries `@[scope(body)]`). It is lowered once and emitted
-  twice — unprimed on the left, primed on the right — so `|- var a : int := 0; -|`
-  declares the bi-local *pair* `a`/`a'` from one source name.
-
-  That is what makes a single linear DDM typing context enough. WhyRel writes
-  the same name on both sides (`Var i:int | i:int`), and DDM cannot tell two
-  same-named bindings apart by which side of a `|` a reference sits on. Under
-  `|- … -|` the name is declared exactly once, and the translator supplies the
-  two Core variables — so nothing has to be disambiguated after the fact.
+  clause (which carries `@[scope(body)]`); `Var` does the same through
+  `@[scope(l)]`/`@[scope(r)]`. What is distinctive is the lowering: the one
+  statement is lowered once and emitted twice — unprimed on the left, primed on
+  the right — so `|- var a : int := 0; -|` declares the *pair* `a`/`a'` from one
+  source name.
 
   A `bi_embed` side's own declarations stay local to that side: the grammar
   exports nothing from a split, so both sides may reuse a name, and a later

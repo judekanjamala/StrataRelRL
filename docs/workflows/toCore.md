@@ -77,13 +77,16 @@ It is cosmetic, but worth knowing before you diff two `toCore` outputs by eye.
 
 | Code | Meaning | Trigger |
 |---|---|---|
-| 0 | printed | including when translation emitted diagnostics — see below |
-| 1 | user error | parse error, unreadable file, bad flag |
+| 0 | printed | including when translation emitted a non-fatal diagnostic |
+| 1 | user error | parse error, unreadable file, bad flag, or an error in the source program |
+| 3 | `internalError` | a broken translator invariant |
 
-**`toCore` does not fail on translation diagnostics.** It prints them to stderr
-and still exits 0, unlike [`verify`](verify.md) and [`project`](project.md),
-which both exit 3 in that case. If you script around `toCore`, check stderr
-rather than the exit status.
+**The output still prints on a fatal diagnostic, but the exit code fails.**
+Printing is the point of the command, so the Core program goes to stdout either
+way; a fatal diagnostic means it is not the program written, and exiting 0 would
+hand a silently-wrong `.core.st` file to whatever consumes it next. A non-fatal
+diagnostic still prints to stderr and still exits 0, so check stderr as well if
+you script around it.
 
 ## Intended use
 

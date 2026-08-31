@@ -1,6 +1,6 @@
-// The two declaration forms: `Var` when the sides' names differ (either side
-// omittable, nothing initialized), `|- … -| ;` when they share one. Why the
-// split is forced rather than chosen: docs/design.md.
+// The two declaration forms: `Var`, one variable per side under its own name
+// (either side omittable, nothing initialized), and `|- … -| ;`, one bi-local
+// whose pair the translator supplies. What separates them: docs/design.md.
 
 program RelRL;
 
@@ -9,7 +9,7 @@ program RelRL;
 biproc differing
   ensures { s =:= t }
 =
-  // Neither is primed, so `s =:= t` relates them directly.
+  // The right side is primed like any other, so `s =:= t` is `s == t'`.
   Var s : int | t : int ;
   // Left only. `Var | u : int ;` declares one on the right alone.
   Var acc : int | ;
@@ -20,8 +20,20 @@ biproc differing
     t := 6;
   >> ;
 
-// A shared name goes through the synchronized form, which declares the pair
-// `n`/`n'` from one source name.
+// `Var` does not need the names to differ — the right side is primed, so this
+// is WhyRel's own `Var i:int | i:int` and the two `n`s stay apart.
+biproc repeated
+  ensures { <| n == 1 <] /\ [> n == 2 |> }
+=
+  Var n : int | n : int ;
+  <<
+    n := 1;
+  |
+    n := 2;
+  >> ;
+
+// The synchronized form instead declares the *pair* `n`/`n'` from one source
+// name, which is what `Agree n` needs: one variable both programs have.
 biproc shared
   ensures { Agree n }
 =

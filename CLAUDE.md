@@ -18,7 +18,7 @@ lake build relrl
 lake exe relrl verify RelRL/Examples/Assertions.relrl.st  # smoke test: expect 12/12 passed
 lake exe relrl verify RelRL/Examples/SeqBi.relrl.st       # expect 4/4 passed
 lake exe relrl verify RelRL/Examples/Swap.relrl.st        # expect 2/2 passed
-lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 2/2 passed
+lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 4/4 passed
 lake exe relrl toCore RelRL/Examples/Swap.relrl.st        # print the translated Core program
 lake exe relrl project RelRL/Examples/Swap.relrl.st --side left   # one side alone, as Core
 ```
@@ -65,6 +65,12 @@ points at the `issues.md` section that explains it.
   have all been restated in four places at once here.
 
 ## Things that will bite
+
+- **A `datatype` or multi-function `rec` block in the same file as a `biproc`
+  is refused**, by `misaligning_command?` in `Translate.lean`. Not a style rule:
+  the body's references to top-level declarations would otherwise resolve to the
+  wrong decl, or to the literal `0`, and verify a false spec. Widen the guard,
+  never loosen it, until the upstream fix lands — `docs/issues.md` has both.
 
 - **The `Strata` dependency is unpinned** — `rev = "main"` in `lakefile.toml`.
   A build that breaks after `lake update` may be upstream drift rather than a
@@ -116,12 +122,16 @@ recur through its own sides. Making the sides `Command`, or adding
 ## The other invariant: scope chain and binding threading must agree
 
 `@[scope(c)]` on `bi_sync` is what makes a `|- … -|` declaration outlive its
-bicommand, and `@[scope(body)]` on `rel` is what puts those bi-locals in scope
-for `ensures`. `Translate.lean` mirrors that chain by hand when it threads
-Core's `TransBindings` from one side to the next. If the two drift, a de Bruijn
+bicommand, `@[scope(l)]`/`@[scope(r)]` do the same for `Var`, and
+`@[scope(body)]` on `rel` is what puts all of them in scope for `ensures`.
+`Translate.lean` mirrors that chain by hand, twice over: it threads Core's
+`TransBindings` from one side to the next, and it carries `BodyState.bilocals`,
+the set a right-hand fragment is renamed against. A name that outlives its
+bicommand on the *right* has to be in both. If the bindings drift, a de Bruijn
 index resolves against the wrong binding list and Core aborts with
 `translateExpr out-of-range bound variable` — not a type error, and not at the
-line you changed. Change one, change the other.
+line you changed. If the rename set drifts, the two programs quietly share a
+variable instead. Change one, change the others.
 
 ## Reading the dependency
 

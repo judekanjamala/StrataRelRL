@@ -19,12 +19,17 @@
   statements per side; an `Assert { R }` between them is what makes the
   alignment observable, since the assertion sees both sides exactly as they
   stand at that point.
-- **`Var` declares bi-locals whose names differ, including one-sided ones.**
-  `Var s : int | t : int ;` declares `s` in the left program and `t` in the
-  right; `Var acc : int | ;` and `Var | u : int ;` declare a variable existing
-  in only one of them. Nothing is initialized, and neither name is primed, so
-  `s =:= t` relates them directly.
-  `RelRL/Examples/BiVar.relrl.st` shows all three forms.
+- **`Var` declares bi-locals, one side at a time.** `Var s : int | t : int ;`
+  declares `s` in the left program and `t` in the right; `Var acc : int | ;` and
+  `Var | u : int ;` declare a variable existing in only one of them. Nothing is
+  initialized. The names need not differ — `Var n : int | n : int ;` is WhyRel's
+  own spelling and works, since the right side is primed like any other.
+  `RelRL/Examples/BiVar.relrl.st` shows all three, repeated name included.
+- **The prime says which program a name belongs to, everywhere.** Every
+  right-side name is `x'` in the translated Core, whether it came from a
+  synchronized bicommand, a split's own declaration, or a one-sided `Var`. So
+  `s =:= t` reads as `s == t'`, and a colliding declaration is reported against
+  its own source range rather than by Core against the fused program.
 - **Synchronized bicommands declare bi-locals.** `|- var a : int := 0; -|` runs
   on both sides and declares the *pair* `a`/`a'` from one source name. It holds
   exactly one statement, as WhyRel's does, so declaring two bi-locals is two
@@ -80,10 +85,11 @@ Ordered by cost, not by importance — correct this if the priorities are wrong.
 
 1. **`Assume { R }`.** One grammar op and one branch in `lower_bicommand`,
    mirroring `bi_assert` with `Statement.assume`. The cheapest real addition.
-2. **Reject same-name `Var` in the translator.** Currently caught by Core against
-   the translated program — [`issues.md`](issues.md), "DDM has one linear typing
-   context" — where the translator already has both the names and the source
-   range to do better.
+2. **Scope-check a split side's names.** A right-hand fragment is renamed
+   against a whitelist, so it can still name a left-only variable and quietly
+   share its Core variable — [`issues.md`](issues.md), "A right-side fragment
+   can name a left-only variable". The fix is a blacklist, which needs to know
+   which names a fragment binds itself.
 3. **`If e|e' then … else … end`.** Each branch is a bicommand sequence, so it
    needs the scope chain and `BodyState` handling that already exist; no new
    mechanism.
@@ -129,6 +135,12 @@ whole design rests on. See `docs/design.md`.
 - **Bicommands.** `If e|e' then … else … end`, `While e|e' . <guard> do … done`,
   `Assume { R }`, `Connect x with y`. Split, synchronized, `Var` and `Assert`
   are what exist.
+- **Datatypes and multi-function `rec` blocks alongside a `biproc`.** Rejected
+  with a located error, because the biproc body's references to top-level
+  declarations would silently misresolve — [`issues.md`](issues.md), "A
+  `datatype` silently misresolves every later top-level reference". Either is
+  fine in a file with no `biproc`; so are type synonyms, opaque `type`s and
+  single-function `rec` blocks alongside one.
 - **Formulas.** Quantifiers (`Rquant`), `let` (`Rlet`), named relational
   predicates and coupling relations (`Rprimitive`, `named_rformula`), and
   everything needing a heap: region-image agreement (``Agree e`f``), refperm.
@@ -146,16 +158,12 @@ first do not need one.
 
 ### Where the semantics diverge
 
-- **The same name on both sides is not expressible.** WhyRel's commonest
-  declaration is `Var i:int | i:int` — one name, both programs. RelRL splits
-  that case in two: `Var` covers *differing* names, and a shared name goes
-  through `|- var i : T; -|`, one binding with the translator supplying the
-  `i`/`i'` pair. Not fixable within DDM — [`issues.md`](issues.md), "DDM has one
-  linear typing context".
 - **Priming is visible.** WhyRel goes to Why3 with genuinely two-state formulas;
   RelRL lowers by self-composition, so the right side really is a set of
-  variables named `a'`. One consequence reaches the surface language: `Agree x`
-  is lexical and unchecked — [`issues.md`](issues.md), "`Agree x` is lexical".
+  variables named `a'`. Two consequences reach the surface language: `Agree x`
+  is lexical and unchecked, and a right-side fragment can still name a left-only
+  variable — [`issues.md`](issues.md), "`Agree x` is lexical" and "A right-side
+  fragment can name a left-only variable".
 - **A top-level `/\` is split** into one obligation per conjunct, for readable
   verifier output. RelRL's own, not WhyRel's.
 

@@ -82,6 +82,37 @@ Every other relational form is a real Core expression elaborated in the
 bi-local scope, so a bad name there is caught by DDM at the right source
 position instead. See `docs/issues.md`.
 
+**A name declared twice.** Self-composition fuses both programs into one Core
+scope, so a name has to be unique there — under its Core name, which for the
+right program carries the prime. The translator checks this itself and reports
+against the declaration, exit 1; verification is skipped, since the Core program
+would not be the one the source denotes:
+
+```console
+$ relrl verify dup.relrl.st          # |- var a : int; -| ; then Var a : int | ;
+dup.relrl.st(7, (6-13)) `a` is declared twice in the left program
+Finished with 0 goals checked, but 1 error(s) occurred.
+```
+
+A collision between a written prime and a generated one reads the same way:
+`Var n' : int | n : int ;` reports that `n` in the right program collides with
+`n'` in the left, since self-composition names both `n'`. Note what is *not* an
+error: `Var n : int | n : int ;` declares `n` and `n'`, one per program, and is
+fine.
+
+**A `datatype` or multi-function `rec` block beside a `biproc`.** Refused
+against the offending command, exit 1. The two cannot share a file: the biproc
+body's references to top-level declarations would silently resolve to the wrong
+declaration — [`issues.md`](../issues.md) has the mechanism and the upstream fix.
+
+```console
+$ relrl verify dt.relrl.st
+dt.relrl.st(2, (0-37)) a `datatype` declaration cannot appear in a file that also
+declares a `biproc`: references to top-level declarations inside the biproc would
+silently resolve to the wrong one. docs/issues.md has the mechanism.
+Finished with 0 goals checked, but 1 error(s) occurred.
+```
+
 **A parse error.** Reported against the source with a line and column, exit 1.
 Here the synchronized bicommand was closed with WhyRel's `_|` rather than
 RelRL's `-|`:
@@ -106,7 +137,7 @@ deliberate change that belongs in the same commit as this table.
 | `Assertions.relrl.st` | 12/12 pass | 0 | every relational formula form, `requires` over a top-level constant |
 | `SeqBi.relrl.st` | 4/4 pass | 0 | a bicommand sequence with an `Assert` between the aligned steps |
 | `Swap.relrl.st` | 2/2 pass | 0 | the WhyRel swap port: synchronized declarations, a two-step alignment |
-| `BiVar.relrl.st` | 2/2 pass | 0 | `Var` in all three forms, against the shared-name `\|- … -\|` |
+| `BiVar.relrl.st` | 4/4 pass | 0 | `Var` in all three forms, with and without a repeated name, against `\|- … -\|` |
 
 `toCore` and `project --side left|right` should exit 0 on all four.
 

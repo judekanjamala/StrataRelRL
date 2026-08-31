@@ -56,6 +56,13 @@ def read_relrl_program (fm : StrataDDM.DialectFileMap) (file : String) :
   | .program pgm => pure (pgm, inputCtx)
   | .dialect _ => throw (IO.userError s!"Expected an RelRL program file, got a dialect: {file}")
 
+/-- What a run of diagnostics should exit with. An error in the user's program
+exits 1; anything else a diagnostic reports is a translator bug, which exits 3
+so it is not mistaken for a rejected program. -/
+def diagnostics_exit_code (ds : Array Message) : UInt8 :=
+  if ds.any (fun d => d.kind.impact != .userCodeError) then ExitCode.internalError
+  else ExitCode.userError
+
 def to_core_command : Command where
   name := "toCore"
   args := [ "file" ]
@@ -70,6 +77,11 @@ def to_core_command : Command where
     for d in diagnostics do
       IO.eprintln s!"{Message.format d (some ictx.fileMap)}"
     IO.println (StrataDDM.Program.toString (Strata.coreToStrataProgram coreProgram))
+    -- Printing is the point, so the output still goes out — but a fatal
+    -- diagnostic means it is not the program written, and exiting 0 would hand
+    -- a silently-wrong Core file to whatever consumes it next.
+    if diagnostics.any (fun d => d.kind.impact.isFatal) then
+      IO.Process.exit (diagnostics_exit_code diagnostics)
 
 def side_flag : Flag :=
   { name := "side", help := "Which side of each biproc to keep: left or right.",
@@ -100,7 +112,7 @@ def project_command : Command where
     IO.println (StrataDDM.Program.toString (Strata.coreToStrataProgram coreProgram))
     -- A diagnostic means the program printed is not the program written.
     if !diagnostics.isEmpty then
-      IO.Process.exit ExitCode.internalError
+      IO.Process.exit (diagnostics_exit_code diagnostics)
 
 def verify_command : Command where
   name := "verify"
@@ -128,8 +140,8 @@ def verify_command : Command where
     -- it fails the run even when every obligation discharged.
     if !diagnostics.isEmpty then
       println! f!"Finished with {vcResults.size} goals checked, \
-        but {diagnostics.size} translation error(s) occurred."
-      IO.Process.exit ExitCode.internalError
+        but {diagnostics.size} error(s) occurred."
+      IO.Process.exit (diagnostics_exit_code diagnostics)
     let success := vcResults.all _root_.Core.VCResult.isSuccess
     if success then
       println! f!"All {vcResults.size} goals passed."
