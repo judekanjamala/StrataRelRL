@@ -37,25 +37,6 @@ local override in `Main.lean` works but is partial — `printIndented` and
 `exitCmdFailure` paths inside `parseArgs` stay wrong unless `parseArgs` is
 forked, risking drift from upstream's flag semantics.
 
-## Translation assumes every non-`biproc` command is Core
-
-`translate_program_with` builds the Core-only program with a hardcoded dialect
-map:
-
-```lean
-let coreProgram := StrataDDM.Program.create Core_map "Core" coreCommands
-```
-
-`Core_map` holds Core, `Init` and Core's imports — not `RelRL`. Sound today
-only by accident of the grammar: `biproc` is filtered out before reaching here,
-and no bicommand is reachable at top level, so only Core operations arrive. That
-breaks the moment RelRL gains a second top-level operator or imports a second
-dialect.
-
-Fix: thread the real dialect map — the one `build_relrl_dialect_file_map`
-already builds — through `translate_program_with`, instead of naming
-`Core_map`. Deferred until a second operator motivates it.
-
 ## A `datatype` breaks the top-level binding list a `biproc` body resolves against
 
 `translate_program_with` reconstructs Core's top-level binding list from the
@@ -109,20 +90,3 @@ present and future, and lets the guard be deleted. The dependency is unpinned
 Do not fix it by reimplementing `translateCoreDecls`'s dispatch inside RelRL:
 that duplicates a thirteen-case match against an unpinned dependency, which is
 the drift CLAUDE.md warns about.
-
-## DDM has one linear typing context
-
-DDM threads a single linear typing context through elaboration, and
-`@[scope(…)]` only chooses *which* argument's context an operator exports —
-there is never more than one to export. A bicommand has two sides, so DDM cannot
-tell which program a reference belongs to: `Var n : int | n : int ;` and
-`<< var n : int; | var n : int; >> ;` each push two bindings named `n`, and a
-reference to `n` resolves to one of them whichever side of the `|` it sits on.
-
-That costs nothing on its own, because priming is applied by syntactic side
-after elaboration: the reference resolves to a binding *named* `n` either way,
-and a right-hand fragment renames it to `n'`. What DDM cannot do is reject a
-side that names the *other* program's variable. Core's `Lhs` is
-`op lhsIdent (v : Ident)` and `Ident` is lexical, so a split side may even
-*assign* to a name it cannot read. `BodyState.check_side` in the translator is
-what reports that, with the source range DDM would have used.

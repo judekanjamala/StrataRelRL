@@ -25,7 +25,7 @@ and never to `.fvar` — which is what makes that safe: the only names these
 helpers can reach are the two programs' own locals, and on the right side every
 one of them belongs to the right program. Renaming against a list of *expected*
 names instead would let anything off that list fall through to the left
-program's variable; `docs/issues.md` records what that cost. -/
+program's variable; CLAUDE.md, "The other invariant", says not to. -/
 
 /-- Top-level declared names. One nested in an `if`/`while` body stays
 block-scoped, so it cannot collide across sides. Used for the collision check,

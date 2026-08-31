@@ -93,7 +93,21 @@ are rejected by the parser:
   a reference resolves to a binding under the name it was written with, and
   priming by syntactic side sends a right-hand one to its primed copy. Naming
   the *other* program's variable is caught by `BodyState.check_side` rather than
-  by DDM — `docs/issues.md`.
+  by DDM, for the reason in the next entry.
+
+- **The translator scope-checks each side, because DDM cannot.** DDM threads one
+  linear typing context through elaboration, and `@[scope(…)]` chooses *which*
+  argument's context an operator exports — never more than one. A bicommand has
+  two sides, so a reference resolves without regard to which side of the `|` it
+  sits on. Where both sides declare the name that is harmless, as above. Where
+  only one does it is not: DDM will resolve a right-hand reference to a
+  left-only variable, and Core's `Lhs` is `op lhsIdent (v : Ident)` with `Ident`
+  lexical, so a side may even *assign* to a name it cannot read.
+
+  `BodyState.check_side` closes that: it compares the names a fragment mentions
+  against what that side has declared, and reports `the right program has no
+  \`acc\`` against the source. Core does catch it unaided — the primed name is
+  simply undeclared — but only against the translated program, as exit 3.
 
 - **`Agree x` takes an `Ident`, not an expression, because `x'` is a name
   translation invents.** Every other relational form — `Both (e)`, `<| e <]`,
@@ -283,8 +297,9 @@ are rejected by the parser:
   `Core.Expression.Expr` itself, exactly as the old two-identifier agreement
   built its `.eq`. That is what makes the rest of RelRL's `rformula` reachable:
   `Both`, `Agree`, `<| … <]`, `[> … |>` and the connectives are all just shapes
-  over expressions. What is left of the old limitation is that nothing checks a
-  spec's names until Core does; see `docs/issues.md`.
+  over expressions. Nothing *resolves* those names, so `check_formula` checks
+  them instead — against the Core name each side's declarations take, which is
+  what reports `Agree zzz` rather than leaving it to Core.
 
 - **Two layers, and no token shared between them.** RelRL separates a one-state
   `formula` from a two-state `rformula`, and spells them differently: `&&`,

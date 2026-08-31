@@ -138,6 +138,10 @@ bicommands out keeps the indices aligned. -/
 def translate_program_with (mode : Mode) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext := Inhabited.default) : TranslateM Core.Program := do
   let coreCommands := p.commands.filter (fun op => op.name != q`RelRL.biproc)
+  -- `Core_map` holds Core and its imports, not `RelRL`. Sound only because
+  -- `biproc` is filtered out above and no bicommand is reachable at top level;
+  -- a second top-level RelRL operator would need the real dialect map threaded
+  -- through from `build_relrl_dialect_file_map`.
   let coreProgram := StrataDDM.Program.create Core_map "Core" coreCommands
   let (coreDecls, coreErrors) :=
     TransM.run ictx (translateCoreDecls coreProgram {}) p.globalContext
