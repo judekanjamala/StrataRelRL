@@ -92,6 +92,15 @@ are rejected by the parser:
   bicommand or a spec cannot see either copy. `docs/issues.md` records what
   that costs.
 
+- **A call inside a bicommand is Core's `call`, and needs nothing new.** The
+  sides of a split are Core `Statement`s, and `call f(x, out y);` is one — so
+  relating two programs that call the same procedures in different orders works
+  the moment procedures do. Core resolves a call against the callee's `spec`
+  rather than its body, which is exactly what makes WhyRel's `swap` provable:
+  `f` and `g` commute because their specs say so, not because anything inlines
+  them. This is the reuse argument paying off rather than a feature that was
+  added.
+
 - **A biproc's parameters are a Core `Bindings` per side.** `out` and `inout`,
   and the whole of `translateProcBindings`, then come from Core unchanged — the
   same reuse argument as for statements inside a bicommand. The cost is the

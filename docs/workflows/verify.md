@@ -56,15 +56,22 @@ conjuncts of the `ensures` clause plus the two of the `Assert` make twelve
 obligations from two written formulas.
 
 **A spec that does not hold.** Reported per obligation, exit 2. Here
-`Swap.relrl.st`'s second bicommand has been changed to end `a := 4` on the
-right, so `Agree a` is false while `Agree b` still holds:
+`SeqBi.relrl.st`'s first bicommand has been changed to set `a := 4` on the
+right, so every claim about `a` is false while the ones about `b` still hold —
+the mid-body `Assert` and the `ensures` both split, so four obligations report
+independently:
 
 ```console
 $ relrl verify fail.relrl.st
-fail.relrl.st(9, 2) [ensures_1]: ❌ fail
-fail.relrl.st(9, 2) [ensures_2]: ✅ pass
-Finished with 1 goals passed, 1 failed.
+fail.relrl.st(18, 2) [assert_1_1]: ❌ fail
+fail.relrl.st(18, 2) [assert_1_2]: ✅ pass
+fail.relrl.st(8, 2) [ensures_1]: ❌ fail
+fail.relrl.st(8, 2) [ensures_2]: ✅ pass
+Finished with 2 goals passed, 2 failed.
 ```
+
+Each line is one conjunct, at the source position of the clause it came from —
+the `Assert`'s two at line 18, the `ensures`'s two at line 8.
 
 **A name a spec got wrong.** `Agree x` is lexical, so nothing checks it until
 Core does — against the *translated* program, so the position is a character
@@ -136,7 +143,7 @@ deliberate change that belongs in the same commit as this table.
 |---|---|---|---|
 | `Assertions.relrl.st` | 12/12 pass | 0 | every relational formula form, `requires` over a top-level constant |
 | `SeqBi.relrl.st` | 4/4 pass | 0 | a bicommand sequence with an `Assert` between the aligned steps |
-| `Swap.relrl.st` | 2/2 pass | 0 | the WhyRel swap port: synchronized declarations, a two-step alignment |
+| `Swap.relrl.st` | 6/6 pass | 0 | the WhyRel swap port: unary calls related through the callees' specs, aligned two ways |
 | `BiVar.relrl.st` | 4/4 pass | 0 | `Var` in all three forms, with and without a repeated name, against `\|- … -\|` |
 | `Branching.relrl.st` | 5/5 pass | 0 | `If` with and without `else`, and `If4`; the guard-agreement obligation |
 | `Loops.relrl.st` | 20/20 pass | 0 | `While` lockstep and with alignment guards, `WhileL`, `WhileR`, `invariant` |

@@ -42,29 +42,29 @@ under the `biproc`'s own name.
 ## Output
 
 ```console
-$ relrl project RelRL/Examples/Swap.relrl.st --side left
+$ relrl project RelRL/Examples/SeqBi.relrl.st --side left
 program Core;
-procedure swap ()
+procedure aligned ()
 {
   left: {
     var a : int := 0;
     var b : int := 0;
-    a := 3;
-    b := 3;
+    a := 1;
+    b := 2;
   }
 };
 ```
 
 ```console
-$ relrl project RelRL/Examples/Swap.relrl.st --side right
+$ relrl project RelRL/Examples/SeqBi.relrl.st --side right
 program Core;
-procedure swap ()
+procedure aligned ()
 {
   right: {
     var a : int := 0;
     var b : int := 0;
-    b := 3;
-    a := 3;
+    a := 1;
+    b := 2;
   }
 };
 ```
@@ -72,6 +72,8 @@ procedure swap ()
 Note the contrast with [`toCore`](toCore.md) on the same file: there the block
 is labelled `biproc` and holds both sides with the right one primed; here the
 block is labelled with the side, and `a`/`b` are unprimed in *both* projections.
+The `Assert` between the two aligned steps is gone as well — it names both
+sides, and a projection has only one.
 
 The synchronized `|- … -|` that declares `a` and `b` appears in both projections,
 since it is a command both programs run.

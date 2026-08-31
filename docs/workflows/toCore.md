@@ -26,19 +26,21 @@ Defined at `to_core_command` in `RelRL/Cli.lean`. Mirrors how the upstream
 ## Output
 
 ```console
-$ relrl toCore RelRL/Examples/Swap.relrl.st
+$ relrl toCore RelRL/Examples/SeqBi.relrl.st
 program Core;
-procedure swap ()
+procedure aligned ()
 {
   biproc: {
     var a : int := 0;
     var b : int := 0;
-    a := 3;
-    b := 3;
+    a := 1;
     var |a'| : int := 0;
     var |b'| : int := 0;
-    |b'| := 3;
-    |a'| := 3;
+    |a'| := 1;
+    assert [assert_1_1]: a == a';
+    assert [assert_1_2]: b == 0 && b' == 0;
+    b := 2;
+    |b'| := 2;
     assert [ensures_1]: a == a';
     assert [ensures_2]: b == b';
   }

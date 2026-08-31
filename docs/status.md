@@ -30,6 +30,12 @@
   synchronized bicommand, a split's own declaration, or a one-sided `Var`. So
   `s =:= t` reads as `s == t'`, and a colliding declaration is reported against
   its own source range rather than by Core against the fused program.
+- **Unary calls inside a bicommand.** A side of a split, or a synchronized
+  bicommand, may `call` a Core `procedure` declared in the same file. The call
+  site uses the callee's `spec`, not its body, so two programs calling the same
+  commuting methods in opposite orders relate through those specs alone — which
+  is what WhyRel's flagship `all_all/swap` example does.
+  `RelRL/Examples/Swap.relrl.st` ports it, `m` and `m2` both.
 - **Biproc parameters and returns.** `biproc m (n : int, out result : int) |
   (n : int, out result : int)` gives the Core procedure inputs `n`, `n'` and
   outputs `result`, `result'`. Each side is a Core `Bindings`, so `out` and
@@ -101,16 +107,14 @@
 
 Ordered by cost, not by importance — correct this if the priorities are wrong.
 
-1. **Calls between biprocs.** Parameters and returns exist now, so a call
-   bicommand is the next step: it needs the callee's relational spec at the call
-   site, which in turn wants `requires`/`ensures` lowered to Core's own
-   pre/postconditions rather than to `assume`/`assert` inside the body. That
-   also unlocks the `bimodule` layer.
-2. **Fix the `datatype` misalignment upstream**, which would let the guard in
-   `misaligning_command?` be deleted — [`issues.md`](issues.md).
+**A heap model is the next thing.** Everything in
+[Not implemented](#not-implemented) below needs one, and nothing above it does:
+the forall-forall fragment without a heap is complete, from `Var` through the
+loop bicommands to parameters and unary calls.
 
-Everything in [Not implemented](#not-implemented) below that is not listed here
-needs a heap model first.
+One loose end, not urgent: the `datatype` misalignment
+([`issues.md`](issues.md)) is contained by a guard rather than fixed. Fixing it
+upstream would let `misaligning_command?` be deleted.
 
 ## Differences from WhyRel
 
@@ -164,12 +168,9 @@ whole design rests on. See `docs/design.md`.
   predicates and coupling relations (`Rprimitive`, `named_rformula`), and
   everything needing a heap: region-image agreement (``Agree e`f``), refperm.
 - **Program structure.** No `interface` / `module` / `bimodule`, no classes,
-  objects, heap or regions, no `effects` clauses, and no calls between biprocs.
-  Parameters and returns now exist, so WhyRel's
-  `meth fact (n:int|n:int) : (int|int)` has an equivalent; what is missing is
-  the call. `requires`/`ensures` lower to `assume`/`assert` inside the body
-  rather than to Core's own pre/postconditions, and a caller needs the contract,
-  not the body — so that is the first thing a call bicommand would change.
+  objects, heap or regions, no `effects` clauses. Parameters, returns and unary
+  calls all exist; what a `bimodule` would add on top is the module structure
+  itself, and the relational specs that go with it.
 - **Forall-exists.** Only the forall-forall fragment; no `-all-exists` mode.
 
 The heap is missing deliberately — the forall-forall examples being targeted
