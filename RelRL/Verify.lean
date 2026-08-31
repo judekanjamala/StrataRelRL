@@ -8,6 +8,7 @@ module
 
 public import RelRL.DDMTransform.Translate
 public import Strata.Languages.Core
+public import Strata.Pipeline.Messages
 
 namespace Strata
 namespace RelRL

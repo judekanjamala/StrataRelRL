@@ -7,13 +7,13 @@
 module
 
 public import RelRL.DDMTransform.Translate.Priming
+public import Strata.Languages.Core.Verifier
+public import Strata.Pipeline.Messages
 
 namespace Strata
 namespace RelRL
 
 public section
-
-open StrataDDM (Operation Arg QualifiedIdent)
 
 /-! # What a biproc body accumulates, and the checks over it
 

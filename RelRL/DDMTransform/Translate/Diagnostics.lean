@@ -7,14 +7,11 @@
 module
 
 public import Strata.Pipeline.Messages
-import StrataDDM.AST
 
 namespace Strata
 namespace RelRL
 
 public section
-
-open StrataDDM (Operation Arg QualifiedIdent)
 
 /-! # Translation diagnostics
 

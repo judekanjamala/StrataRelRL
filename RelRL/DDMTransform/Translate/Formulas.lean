@@ -7,13 +7,15 @@
 module
 
 public import RelRL.DDMTransform.Translate.Priming
+public import Strata.Languages.Core.Verifier
+import StrataDDM.AST
 
 namespace Strata
 namespace RelRL
 
 public section
 
-open StrataDDM (Operation Arg QualifiedIdent)
+open StrataDDM (Arg)
 
 /-! # Relational formulas
 

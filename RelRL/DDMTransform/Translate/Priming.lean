@@ -13,8 +13,6 @@ namespace RelRL
 
 public section
 
-open StrataDDM (Operation Arg QualifiedIdent)
-
 /-! ## Priming
 
 A right-hand fragment is renamed apart before the two sides are emitted

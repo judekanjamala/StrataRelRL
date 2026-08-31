@@ -8,13 +8,17 @@ module
 
 public import RelRL.DDMTransform.Translate.Formulas
 public import RelRL.DDMTransform.Translate.State
+public import Strata.Languages.Core.Verifier
+public import Strata.DL.Imperative.MetaData
+public import Strata.Pipeline.Messages
+import StrataDDM.AST
 
 namespace Strata
 namespace RelRL
 
 public section
 
-open StrataDDM (Operation Arg QualifiedIdent)
+open StrataDDM (Arg)
 
 /-! # Lowering one bicommand
 

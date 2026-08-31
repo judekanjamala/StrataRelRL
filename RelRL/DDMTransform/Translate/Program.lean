@@ -9,13 +9,17 @@ module
 public import RelRL.DDMTransform.Grammar
 public import RelRL.DDMTransform.Translate.Bicommands
 public import RelRL.DDMTransform.Translate.Diagnostics
+public import Strata.Languages.Core.Verifier
+public import Strata.DL.Imperative.MetaData
+public import Strata.Pipeline.Messages
+import StrataDDM.AST
 
 namespace Strata
 namespace RelRL
 
 public section
 
-open StrataDDM (Operation Arg QualifiedIdent)
+open StrataDDM (Operation Arg)
 
 /-! # From a `biproc` to a Core program
 
