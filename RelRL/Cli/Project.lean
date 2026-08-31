@@ -14,9 +14,46 @@ namespace Strata.RelRL.Cli
 
 /-! # `relrl project`
 
-Print the Core concrete syntax of one side of every `biproc` — the unary program
-that side denotes, with neither the other side nor the relational `ensures`.
-`docs/workflows/project.md`. -/
+```console
+relrl project <file.relrl.st> --side left|right [--include <dir>]...
+```
+
+Print one side of every `biproc` as an ordinary unary Core program — one
+procedure per `biproc`, under its own name. A relational judgement is a statement
+about two programs; `verify` checks it by fusing them, and `project` recovers the
+two being talked about. It answers "what exactly is the left-hand program here?",
+which is what you want when a spec fails and the question is whether the fault is
+in one side or in the relation between them.
+
+`Mode` in `Translate/State.lean` says what a projection drops and why. The short
+version: the other side, all priming, and every relational formula. Contrast
+`toCore` on the same file — there the block is labelled `biproc` and holds both
+sides with the right one primed; here it is labelled with the side, and names are
+unprimed in *both* projections.
+
+## Exit codes
+
+| Code | Meaning | Trigger |
+|---|---|---|
+| 0 | printed | |
+| 1 | user error | missing or unrecognised `--side`, parse error, unreadable file, or an error in the source program |
+| 3 | `internalError` | a broken translator invariant — the program printed is not the program written |
+
+One source error reaches projection: a `datatype`, or a `rec` block of more than
+one function, in a file that also declares a `biproc`. That guard is deliberately
+not mode-gated — the top-level binding list every body is lowered against is as
+wrong here as under `verify` (`docs/issues.md`). No body is lowered once it
+fires, so what prints is the Core declarations alone.
+
+The duplicate-declaration check does *not* run here: it is about names colliding
+in the one block self-composition fuses, and a projection has no such block. The
+exit-3 row is defensive — the remaining diagnostics come from
+`emit_invariant_violation`, which fires only if grammar and translator have
+drifted. A relational formula Core would reject does not reach it either, since
+projection drops formulas before lowering them; `project` exits 0 on a file
+`verify` exits 3 on.
+
+`--side` is required and accepts exactly `left` or `right` (`Side.of_string?`). -/
 
 def side_flag : Flag :=
   { name := "side", help := "Which side of each biproc to keep: left or right.",

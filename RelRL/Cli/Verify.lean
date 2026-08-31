@@ -15,8 +15,51 @@ namespace Strata.RelRL.Cli
 
 /-! # `relrl verify`
 
-Parse, translate and verify in one step, one pass/fail line per obligation.
-`docs/workflows/verify.md` has the output and every exit code.
+```console
+relrl verify <file.relrl.st> [--include <dir>]... [verify options]
+```
+
+Parse, translate and discharge every proof obligation in one step: one line per
+obligation, then a summary. Needs an SMT solver on `PATH` (cvc5 by default).
+Flags are `--include` plus Core's own `verifyOptionsFlags` — solver selection,
+timeouts, VC dump directory, verbosity; verbosity is forced to `.quiet` so the
+per-obligation lines are the whole output.
+
+Because the last stage is Core's unmodified verifier, every obligation reported
+is an ordinary Core assertion. What makes it *relational* is entirely what the
+translation built.
+
+## Exit codes
+
+| Code | Meaning | Trigger |
+|---|---|---|
+| 0 | all obligations discharged | |
+| 1 | user error | parse error, or an error in the source program |
+| 2 | `failuresFound` | a spec that does not hold |
+| 3 | `internalError` | a solver or translator failure |
+
+## Failure modes
+
+- **A spec that does not hold** — reported per obligation, exit 2. Each line is
+  one conjunct, at the source position of the clause it came from.
+- **A name a spec got wrong** — exit 1. `Agree x` takes an `Ident`, so DDM never
+  elaborates it; `check_formula` checks the operand and says which program is
+  missing it. Every other relational form is a Core expression, so DDM catches a
+  bad name there first, at the same position.
+- **A name declared twice** — exit 1, against the declaration. Both programs land
+  in one Core scope, so a name must be unique there under its Core name, which
+  for the right program carries the prime. Verification is skipped, since the
+  Core program would not be the one the source denotes. Note what is *not* an
+  error: `Var n : int | n : int ;` declares `n` and `n'`, one per program.
+- **A `datatype` or multi-function `rec` block beside a `biproc`** — refused
+  against the offending command, exit 1. `docs/issues.md` has the mechanism.
+- **A parse error** — reported against the source with a line and column, exit 1.
+
+## Debugging a failure
+
+`verify` gives the verdict, not the program that was checked. When an obligation
+fails and the reason is not obvious, run `toCore` on the same file to see the
+self-composed program the solver saw, and `project` to check each side alone.
 
 `_root_.Core.VerifyOptions` is spelled out because `Strata.Core` (the dialect
 value) shadows the `Core` namespace here — CLAUDE.md, "Two `Core` namespaces". -/

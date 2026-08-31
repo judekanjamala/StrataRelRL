@@ -13,5 +13,5 @@ public import RelRL.Cli.Verify
 
 /-! # RelRL CLI
 
-One module per command, mirroring `docs/workflows/`. `Main.lean` assembles them
+One module per command, each documenting itself. `Main.lean` assembles them
 into the `relrl` binary; `RelRL.Cli.Common` holds what all three share. -/

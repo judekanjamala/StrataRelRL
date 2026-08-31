@@ -7,7 +7,7 @@
 A Strata dialect adding **bicommands** on top of Strata Core, verified by
 lowering to Core. `README.md` covers intent and the file layout;
 `docs/status.md` what works and how the dialect differs from WhyRel;
-`docs/workflows/` one file per workflow plus the pipeline they share;
+`docs/workflows.md` how the workflows relate, each documented in its own module;
 `docs/design.md` the decisions and why they went that way; `docs/issues.md`
 known defects, each traced to its root cause.
 
@@ -39,7 +39,7 @@ writing comments:
 | What works, and how it differs from WhyRel | `docs/status.md` |
 | Why a decision went the way it did | `docs/design.md` |
 | What bites when editing | this file |
-| How a stage works, end to end | `docs/workflows/` |
+| How a command or stage works | the module that implements it |
 | A defect, and what fixing it takes | `docs/issues.md` |
 
 Every doc opens with a **Scope** note repeating its half of this table. Read it
@@ -130,8 +130,9 @@ op biproc (name : Ident, params : Option BiBindings,
            @[scope(params)] ens : Seq RelEnsures,
            @[scope(params)] body : Seq Bicommand) : Command =>
   "biproc " name params reqs ens " =\n  " indent(2, body);
-op bi_embed (left : NewlineSepBy Statement, right : NewlineSepBy Statement) : Bicommand =>
-  "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>> ;";
+op bi_embed (left : NewlineSepBy Statement,
+             right : NewlineSepBy Statement) : Bicommand =>
+  "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>>" " ;";
 ```
 
 No Core `Statement`/`Block` operator takes a `Command`, so a `Bicommand` cannot

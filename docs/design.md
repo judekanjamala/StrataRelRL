@@ -1,327 +1,151 @@
 # Design decisions
 
 > **Scope.** One bullet per decision: what was chosen, what was rejected, and
-> why. No usage, no status, no defect lists — [`status.md`](status.md) says what
-> exists, [`issues.md`](issues.md) what is broken, `CLAUDE.md` what bites when
-> editing.
+> why. No usage, no mechanics — [`status.md`](status.md) says what exists,
+> [`issues.md`](issues.md) what is broken, `CLAUDE.md` what bites when editing,
+> and the code says how. Each bullet names the file that implements it.
 
-- **Own package, own CLI.** The repo split follows Strata's
-  `docs/verso/IRTranslationPhilosophyDoc.lean` ("Relation to the proposed
-  repository split", issue #1168): a dialect plus its translation-to-Core
-  depends on `Strata`, never the reverse. The self-contained `lean_exe relrl`
-  extends that to tooling — wiring RelRL into `Strata-CLI` was attempted
-  first and abandoned after it spread the `Strata.Core`/`Core` namespace
-  ambiguity into another repo's build.
+## Shape of the project
 
-- **Bicommand Syntactic category**
+- **Own package, own CLI.** Strata's `docs/verso/IRTranslationPhilosophyDoc.lean`
+  ("Relation to the proposed repository split", issue #1168) has a dialect and
+  its translation-to-Core depend on `Strata`, never the reverse. The
+  self-contained `lean_exe relrl` extends that to tooling: wiring RelRL into
+  `Strata-CLI` was tried first and abandoned once it spread the
+  `Strata.Core`/`Core` namespace ambiguity into another repo's build.
 
-The DDM elaborator always parses category `Init.Command` at a program's top
-level — hardcoded at `StrataDDM/Elab/Core.lean:1838`. So anything appearing at
-top level must be an op returning `Command`, and a category nothing reaches is
-simply dead: declaring `category Bicommand` and `op bi_embed` alone leaves
-`bi_embed` unparseable.
+- **Translate to Core, not to Imperative + Lambda.** Verification runs on the
+  internal Lambda/Imperative ASTs, but Core is the supported entry point that
+  already wires up VC generation and SMT discharge. Lowering to `Core.Program`
+  inherits that pipeline instead of hooking up a verifier, mirroring how
+  `laurelToCore` separates Laurel translation from Core verification.
 
-An identity injection `op … (b : Bicommand) : Command => b` admits
-nesting: it makes every bicommand usable as a command, so with `Command`-typed
-sides `( ( a | b ) | c )` parses.
+- **Hand-walk the DDM AST; don't use `ofAst`.** `#strata_gen` produces a typed
+  Lean AST and an `ofAst` conversion, but no dialect in Strata translates
+  through it — Core, C_Simp and Laurel all walk `Operation`/`Arg` by hand.
+  Following that is what makes reusing `Core.getProgram` possible.
 
-Instead `biproc` is the added as the only RelRL operator in Init's `Command`
-category, and a `Bicommand` appears only inside its `body` field, as an element
-of a sequence.  Operators of
-`Bicommand` take Core `Statement`s and no Core operator takes a `Command` as an
-argument. So a side can hold only statements, a statement can never be a
-`biproc`, and a `Bicommand` can never occur inside a `Bicommand`. Both forms
-are rejected by the parser:
+## Syntax
 
-- **The surface syntax follows WhyRel, the expression layer does not.** From
-  `dnaumann/RelRL` (`src/parser/parser.mly`, `examples/all_all/factorial/prog.rl`):
-  a biprogram is a `;`-terminated sequence of bicommands; a bicommand is a split
-  `( c | c' )`, a synchronized `|_ c _|`, or a relational `Assert { R }`; and a
-  relational formula is built from `Agree x`, `Both (e)`, the one-sided
-  projections `<| e <]` / `[> e |>`, `l =:= r`, and `~ /\ \/ => <=>`.
+- **`Bicommand` is its own category, and never a `Command`.** DDM parses
+  `Init.Command` at a program's top level (`StrataDDM/Elab/Core.lean:1838`), so
+  a category nothing reaches is dead. `biproc` is therefore RelRL's only
+  `Command`, and a `Bicommand` appears only inside its body. An identity
+  injection `op … (b : Bicommand) : Command` would admit nesting — with
+  `Command`-typed sides `<< << a | b >> | c >>` parses — so the sides hold Core
+  `Statement`s, which no Core operator lets contain a `Command`.
+  `Grammar.lean`; CLAUDE.md guards it.
 
-  Three deliberate deviations:
+- **The surface syntax follows WhyRel; the expression layer is Core's.** From
+  `dnaumann/RelRL` (`src/parser/parser.mly`). Three deviations:
+  1. **Statements inside a side are Core's.** `i := 0;` not `i := 0`,
+     `int.add(a, b)` not `a + b`. Matching WhyRel means writing RelRL's own
+     statement grammar and translator, giving up the reuse of `Core.getProgram`.
+  2. **`|- c -|`, not `|_ c _|`.** Forced: DDM's lexer cannot tokenize `_|`.
+  3. **`<< c | c' >>`, not `( c | c' )`.** Preference — `(` is also Core's
+     expression grouping, and `>>` cannot collide since Core has no infix `>`.
 
-  1. **Statements inside a side are Core's, not WhyRel's.** Core terminates
-     statements (`i := 0;`) where WhyRel separates them (`i := 0`), and its
-     expressions are `int.add(a, b)` rather than `a + b`. Matching WhyRel there
-     means writing RelRL's own statement grammar and translating it, which
-     gives up the whole point of reusing `Core.getProgram`.
-  2. **The synchronized bicommand closes with `-|`, not `_|`.** Forced: DDM's
-     lexer cannot tokenize `_|` at all. CLAUDE.md, "Things that will bite", has
-     the mechanism.
-  3. **The split is `<< c | c' >>`, not `( c | c' )`.** A house preference —
-     parentheses parsed fine — but `<<`/`>>` are unmistakably a bicommand where
-     `(` is also Core's expression grouping, and it sidesteps the `);` token
-     trap CLAUDE.md records. Core has no infix `>`, so `>>` cannot collide with
-     an expression.
+- **Two layers, and no token shared between them.** A one-state Core expression
+  spells its connectives `&&`, `||`, `!`; a relational formula spells them
+  `/\`, `\/`, `~`, `=>`, `<=>`. The parser never has to decide which layer an
+  operator belongs to, and neither does a reader. Grouping in a formula is
+  `{ … }`, since `Both (e)` already spends `( … )` on a Core expression.
 
-- **One declaration form.** `Var x : T | y : T ;` declares one variable per
-  side, each under its own name,
-  with either side omittable so a variable can exist in only one program. It is
-  WhyRel's `Var x:T | y:T in CC` without the `in CC`, since a bicommand sequence
-  is already the scope. Nothing is initialized.
+- **A formula's operands are Core expressions, elaborated by DDM.** So
+  `<| int.gt(n, 0) <]` and `l =:= r` work without RelRL owning an expression
+  grammar. `Agree x` is the exception and takes an `Ident`: it names the pair
+  `x`/`x'`, and `x'` exists only after lowering, so there is nothing for DDM to
+  resolve. `check_formula` checks that operand instead. `Formulas.lean`.
 
-  The names need not differ: the right side is primed, so `Var i:int | i:int ;`
-  — what WhyRel writes most often — lowers to `i` and `i'` like any other pair.
-  DDM's single linear typing context does end up holding two bindings called
-  `i`, and cannot tell them apart by which side of the `|` a reference sits on,
-  but it never has to: priming is applied by syntactic side, after elaboration,
-  so a right-hand fragment is renamed whichever binding its `i` resolved to.
+- **Every relational form is written with source names.** No form makes the user
+  write a prime: `Both (i == n)` lowers to `i == n && i' == n'`, and where the
+  sides genuinely differ `l =:= r` relates a left expression to a right one.
+  That is WhyRel's spelling, and it keeps `'` out of the surface syntax.
 
-  Writing the same name on both sides is therefore how you say *both programs
-  have this variable*, which is what `Agree i` and `Both (p)` need; writing
-  different names says they do not. Nothing is initialized either way, so
-  `|- i := 0; -| ;` after the declaration is the idiom — see the next entry for
-  why that form cannot declare.
+## What the bicommands mean
 
-- **Only `Var` extends the scope.** `@[scope(l)]`/`@[scope(r)]` are the only
-  scope annotations on a bicommand; `bi_sync` and `bi_embed` carry none, so a
-  `var` written inside either is scoped to that bicommand and cannot be named
-  after it. WhyRel draws the line in the same place: its `|_ … _|` holds an
-  `atomic_command`, and that grammar has no declaration form — declarations are
-  `Bivardecl` only.
-
-  What `|- … -|` is *for* is the lowering: one statement, lowered once and
-  emitted twice — unprimed on the left, primed on the right — so
-  `|- a := 0; -|` assigns each program's own copy. Pairing a name comes from
-  `Var a : T | a : T ;`, whose two sides prime apart into `a` and `a'`.
-
-  Because nothing but `Var` exports, a reference in a later bicommand resolves
-  against `Var`'s bindings alone, and there is no case where the right side is
-  elaborated in the left's context. Naming the *other* program's variable is
-  still possible through an assignment target, which DDM does not resolve, and
-  `BodyState.check_side` reports that — for the reason in the next entry.
-
-- **The translator scope-checks each side, because DDM cannot.** DDM threads one
-  linear typing context through elaboration, and `@[scope(…)]` chooses *which*
-  argument's context an operator exports — never more than one. A bicommand has
-  two sides, so a reference resolves without regard to which side of the `|` it
-  sits on. Where both sides declare the name that is harmless, as above. Where
-  only one does it is not: DDM will resolve a right-hand reference to a
-  left-only variable, and Core's `Lhs` is `op lhsIdent (v : Ident)` with `Ident`
-  lexical, so a side may even *assign* to a name it cannot read.
-
-  `BodyState.check_side` closes that: it compares the names a fragment mentions
-  against what that side has declared, and reports `the right program has no
-  \`acc\`` against the source. Core does catch it unaided — the primed name is
-  simply undeclared — but only against the translated program, as exit 3.
-
-- **`Agree x` takes an `Ident`, not an expression, because `x'` is a name
-  translation invents.** Every other relational form — `Both (e)`, `<| e <]`,
-  `[> e |>`, `l =:= r` — is a Core expression, elaborated by DDM in the scope
-  the formula sits in. `Agree x` cannot be: it names the *pair* `x`/`x'`, and
-  `x'` exists only after lowering, so DDM has nothing to elaborate it against.
-  It emits `x == x'` lexically instead, and the translator checks the operand
-  itself against what each side declared.
-
-  One consequence is convenient: `Agree x` works on a name a *split* declared,
-  not just a bi-local, because a split's right side is primed against its own
-  declarations, so both `x` and `x'` exist in the flattened block.
-
-- **A call inside a bicommand is Core's `call`, and needs nothing new.** The
-  sides of a split are Core `Statement`s, and `call f(x, out y);` is one — so
-  relating two programs that call the same procedures in different orders works
-  the moment procedures do. Core resolves a call against the callee's `spec`
-  rather than its body, which is exactly what makes WhyRel's `swap` provable:
-  `f` and `g` commute because their specs say so, not because anything inlines
-  them. This is the reuse argument paying off rather than a feature that was
-  added.
-
-- **A biproc's parameters are a Core `Bindings` per side.** `out` and `inout`,
-  and the whole of `translateProcBindings`, then come from Core unchanged — the
-  same reuse argument as for statements inside a bicommand. The cost is the
-  spelling: parens go around each side rather than around the pair as WhyRel
-  writes them.
-
-  The return is a named `out` binding rather than WhyRel's implicit `result`,
-  because `result` would have to be bound in *DDM's* elaborator for a spec to
-  name it, and a translator cannot reach in to do that. Naming the binding
-  `result` on both sides recovers WhyRel's spelling exactly, since the right
-  side is primed like any other name.
-
-  `requires` is scoped to the parameters and `ensures` to the body, so a
-  precondition can relate the two sides' inputs and nothing the body declares.
-  Both still lower to `assume`/`assert` inside the body rather than to Core's
-  own pre/postconditions; that is what a call between biprocs would need first,
-  since a caller reads the callee's contract, not its body.
+- **`Var` is the only declaration form, and the only one that extends the
+  scope.** WhyRel draws the same line: its `|_ … _|` holds an `atomic_command`,
+  a grammar with no declaration form. Writing the same name on both sides is how
+  you say *both programs have this variable*, which is what `Agree` and `Both`
+  need. `Grammar.lean`.
 
 - **Conditionals collapse to one Core `if`, paid for by an obligation.**
-  `If e|e' then CC else DD end` emits `assert e <=> e'` and then a *single*
-  `if e { … }` holding both sides. Two `if`s, one per side, would not need the
-  assert — but they would also not let a bicommand inside a branch relate the
-  two states, which is the whole point of the form. WhyRel's `compile_bicommand`
-  does exactly this, and the assert is what makes it faithful.
+  `If e|e'` asserts `e <=> e'` and then puts both sides under a single `if`.
+  Two `if`s would need no assert, but would also stop a bicommand inside a
+  branch from relating the two states, which is the point of the form. `If4` is
+  for guards that need not agree and pays with four branches instead.
+  `Bicommands.lean`, following WhyRel's `compile_bicommand`.
 
-  `If4 e|e'` is the form for guards that need not agree, and pays instead with
-  four branches over `e /\ e'`, `e /\ ¬e'`, `¬e /\ e'` and the rest. Both are
-  ported from `translate.ml` in `dnaumann/RelRL`; the projections follow that
-  repo's `annot.ml`, where a four-way if projects onto one side by keeping the
-  two branches that agree on it.
-
-- **A loop's alignment guards decide who steps, and the invariant rules out
-  deadlock.** `While e|e' . p|p' do … done` lowers to one Core loop guarded by
-  `e \/ e'`, whose body is
-  `if e /\ p then <left projection> else if e' /\ p' then <right projection>
-  else <both sides>`, and which carries the alignment condition
-  `(e /\ p) \/ (e' /\ p') \/ (e /\ e') \/ (¬e /\ ¬e')` as an invariant. The
-  one-sided steps are literally this translator's `project` mode applied to the
-  body, which is why that mode is more than a printing aid. The invariant is
-  what rules out a state where one side must step and its guard forbids it —
-  WhyRel calls that outcome Fault. Lockstep is the same shape with both
-  alignment guards false, and gets its own op so the guards can be omitted;
-  `WhileL`/`WhileR` drive the loop from one side and, as in WhyRel, still run
-  the whole bicommand body, so it is the body that says the other side stands
-  still.
-
-- **Relational formulas lower to Core `bool`, and a top-level `/\` splits.**
-  Priming is what "the right state" means: a right-hand fragment has every
-  variable it mentions renamed to its primed copy — the variable the right
-  side's statements were lowered onto. So `Both (e)` is `e && prime e`, and
-  `l =:= r` is `l == prime r`. Connectives become Core's own operators via
-  `Core.boolAndOp` and friends, the same values `translateFnTable` maps Core's
-  surface syntax onto.
-
-  A top-level conjunction is peeled into one `assert` per conjunct
-  (`top_conjuncts`), because one obligation per conjunct reads far better in the
-  verifier's output than a single opaque `&&`. `{ … }` is transparent to that
-  peeling; every other connective is opaque, since its parts are not separately
-  provable.
+- **A loop's alignment guards decide who steps; the invariant rules out
+  deadlock.** `While e|e' . p|p'` becomes one loop guarded by `e \/ e'`, whose
+  body dispatches to the left projection, the right projection, or both. The
+  alignment condition is an *invariant*, not an assert: it is what rules out a
+  state where a side must step and its guard forbids it — WhyRel's Fault. The
+  one-sided steps are this translator's own `project` mode applied to the body,
+  which is why that mode is more than a printing aid. `Bicommands.lean`.
 
 - **A bicommand sequence is an alignment, and lowering interleaves per
-  element.** WhyRel writes two commuting calls as `( f | g ); ( g | f );` —
-  a sequence of bicommands, one per aligned step — rather than one bicommand
-  holding two sequences per side. RelRL keeps that, so `<< a := 3 | b := 3 >> ;
-  << b := 3 | a := 3 >> ;` says *which* step lines up with which.
+  element.** `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂`, WhyRel's order. A
+  sequence of two bicommands is therefore *not* the same Core as one bicommand
+  holding both statements per side — `Swap.relrl.st` writes both, as WhyRel
+  does. CLAUDE.md says what breaks if the order is changed.
 
-  Lowering emits each bicommand's left statements and then its right ones, so
-  `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂` — WhyRel's order, where `Bisplit`
-  compiles to `Esequence (left, right)` and `Biseq` composes those. A sequence
-  of two bicommands is therefore not the same Core as one bicommand holding both
-  statements per side; `Swap.relrl.st` writes both, as WhyRel does.
+- **A call inside a bicommand is Core's `call`, and needed nothing new.** A
+  split's sides are Core `Statement`s and a call is one, so relating two
+  programs that call the same procedures in different orders works because Core
+  resolves a call against the callee's `spec`. This is the reuse argument paying
+  off rather than a feature that was added.
 
-  What makes an alignment observable in the obligations is a relational
-  assertion between the elements, which sees both sides as they stand at exactly
-  that point:
+## Specs
 
-  ```
-  << a := 3 | b := 3 >> ;
-  Assert { Agree a } ;      // fails: a = 3, a' = 0
-  << b := 3 | a := 3 >> ;
-  ```
+- **Specs are scoped to the parameters and become Core's own contract.** A spec
+  names what the caller can see, never a bi-local. That is what lets `requires`/
+  `ensures` be Core `preconditions`/`postconditions` rather than an assume and
+  an assert in the body — and only a real postcondition gives `old x` its
+  meaning. A claim about a bi-local is an `Assert { R }` in the body instead,
+  which is strictly more expressive: it is checked where it stands.
+  `Program.lean`.
 
-  lowers to `a := 3; b' := 3; assert a == a'; b := 3; a' := 3;` — the assert
-  lands between the two aligned steps, not after both. The same `Agree a` in the
-  `ensures` passes, which is exactly the alignment being observable.
+- **A biproc's parameters are a Core `Bindings` per side.** `out`, `inout` and
+  `translateProcBindings` then come from Core unchanged. The cost is the
+  spelling: parens go around each side rather than the pair. The return is a
+  named `out` binding, not WhyRel's implicit `result`, because `result` would
+  have to be bound in *DDM's* elaborator for a spec to name it; naming the
+  binding `result` recovers WhyRel's spelling exactly.
 
-- **Specs sit above the body, and both clauses are scoped to the parameters.**
-  Boogie and WhyRel both write `requires`/`ensures` between the signature and
-  the body, and both allow repeats, so RelRL does too. Both carry
-  `@[scope(params)]`: a spec names what the caller can see — the parameters and
-  the file's top-level declarations — and never what the body declares.
+- **A top-level `/\` splits** into one obligation per conjunct, because that
+  reads far better in the verifier's output than one opaque `&&`. `{ … }` is
+  transparent to the peeling; every other connective is opaque, since its parts
+  are not separately provable.
 
-  That is what lets them become Core's own `preconditions`/`postconditions`
-  rather than an `assume` at the top of the body and an `assert` at the bottom.
-  The two are equivalent for a biproc verified on its own, but only a real
-  postcondition gives `old x` its meaning, since Core snapshots an `inout`
-  parameter's entry value for exactly that. It is also the contract a call
-  between biprocs would read, if one is ever added.
+## Translation
 
-  A claim about a bi-local is an `Assert { R }` in the body instead, which is
-  strictly more expressive: it is checked where it stands rather than only at
-  the end. `SeqBi.relrl.st` and `Assertions.relrl.st` are written that way.
+- **The sides are flattened, not nested.** An `ensures` naming both sides is
+  impossible while they sit in `left:`/`right:` blocks, since a Core block's
+  locals are invisible once it closes. Priming makes the two disjoint, so
+  emitting both into one list is the standard forall-forall encoding — sound
+  precisely because after priming neither side can observe the other. That
+  soundness needs the rename to be *total* over the fragment, which is why it is
+  driven by what the fragment mentions rather than a list of expected names.
+  `Priming.lean`; CLAUDE.md's second invariant.
 
-- **Top-level Core commands are translated in one pass, not one at a time.** A
-  `.fvar i` in Core's AST is an index into the program's top-level declarations,
-  and `TransBindings.freeVars` is what it indexes. Translating each command in
-  its own singleton program — which is what translation used to do — left that
-  array empty, so every cross-reference silently resolved to declaration 0:
-  `axiom [p]: int.gt(bound, 0)` came out as `int.gt(0, 0)`. That is a *false*
-  axiom, which makes every obligation in the file vacuously provable, so the
-  bug was worse than a wrong answer. The Core commands now go through one
-  `translateCoreDecls` call and the biprocs are lowered against the bindings it
-  produces. A `biproc` declares no top-level name, so filtering the bicommands
-  out of that pass keeps the indices aligned.
+- **The translator scope-checks each side, because DDM cannot.** DDM threads one
+  linear typing context, so a reference resolves without regard to which side of
+  the `|` it sits on; and Core's `Lhs` is lexical, so a side may even *assign* to
+  a name it cannot read. `BodyState.check_side` reports that with the source
+  range DDM would have used. `State.lean`.
+
+- **Top-level Core commands are translated in one pass.** A `.fvar i` indexes
+  the program's top-level declarations. Translating each command in its own
+  singleton program left that array empty, so every cross-reference resolved to
+  declaration 0 — `axiom [p]: int.gt(bound, 0)` became `int.gt(0, 0)`, a *false*
+  axiom that made every obligation vacuously provable. `Program.lean`.
 
 - **Lowering runs inside Core's `TransM`, threading `TransBindings`.** Each side
-  used to be translated as its own singleton `StrataDDM.Program`. That cannot
-  survive a shared elaboration scope: a reference resolved against an enclosing
-  context carries a de Bruijn index that means nothing in a fresh program, and
-  Core aborts with `translateExpr out-of-range bound variable` after silently
-  miscompiling (`b := a` became `b := 0` when this was first tried). `TransM`,
-  `TransBindings`, `translateStmt` and `translateBlock` are all public
-  (`Strata/Languages/Core/DDMTransform/Translate.lean:22`), and `translateBlock`
-  takes bindings in and hands them back, so the translator now threads that
-  state along exactly the chain the grammar's `@[scope(…)]` annotations
-  describe. The two must be kept in step by hand.
-
-- **Hand-walk the DDM AST; don't use `ofAst`.** `#strata_gen` produces a
-  typed Lean AST and an `ofAst` conversion, but no dialect in Strata
-  actually translates through it — Core, C_Simp, and Laurel all walk `Operation`/`Arg` by hand.
-  Following that practice is what makes reusing `Core.getProgram` possible
-  instead of re-implementing per-statement translation.
-
-
-- **Translate to Core, not to Imperative + Lambda.** All Strata analysis and
-  verification runs on the internal Lambda/Imperative ASTs, but Core is the
-  supported entry point that already wires up VC generation and SMT discharge. A
-  new dialect should lower to `Core.Program` and inherit that pipeline rather
-  than hooking up a verifier itself. This decoupling mirrors how `laurelToCore`
-    separates Laurel translation from Core verification.
-
-- **Relational specs name both sides, and the sides are flattened.** An
-  `ensures [l]: a == a'` clause needs to name both sides at once, and Core block
-  scoping makes that impossible while the sides are nested in `left:` / `right:`
-  blocks. So translation renames the right side apart and emits both into one
-  flat list, interleaved per bicommand — sound for forall-forall because
-  renaming makes the sides unable to observe each other. That soundness needs the rename to be
-  *total* over the fragment, which is why it is driven by what the fragment
-  mentions rather than by a list of expected names; CLAUDE.md's second invariant
-  says what happens otherwise. Core supplies the renaming itself
-  (`Block.substFvar` for reads, `Block.renameLhs` for targets), so no new
-  traversal was written.
-
-
-- **The assertion language is RelRL's own category, not Core's `Expr`.** A
-  spec's operands cannot be Core expressions: DDM resolves names during
-  elaboration, which finishes before translation starts, so `a'` — a name
-  translation invents — fails there with `Unknown expr identifier a'`. The
-  original grammar dodged this by making an agreement two `Ident`s, which are
-  lexical and need no resolution, at the price that `a == a' + 1` did not parse.
-
-  `RelExpr` generalises the dodge instead of living with it. It is RelRL's own
-  expression category, and its leaves are `Ident` and `Num`, so an expression
-  in a spec is never resolved either — the translator walks it and builds the
-  `Core.Expression.Expr` itself, exactly as the old two-identifier agreement
-  built its `.eq`. That is what makes the rest of RelRL's `rformula` reachable:
-  `Both`, `Agree`, `<| … <]`, `[> … |>` and the connectives are all just shapes
-  over expressions. Nothing *resolves* those names, so `check_formula` checks
-  them instead — against the Core name each side's declarations take, which is
-  what reports `Agree zzz` rather than leaving it to Core.
-
-- **Two layers, and no token shared between them.** RelRL separates a one-state
-  `formula` from a two-state `rformula`, and spells them differently: `&&`,
-  `||`, `not` in an expression, `/\`, `\/`, `~`, `->`, `<->` in a relational
-  formula. `RelExpr`/`RelFormula` keep that split, so the parser never has to
-  decide which layer a `(`-less operator belongs to, and a reader never has to
-  either.
-
-  Within `RelExpr` the spelling is Core's, not RelRL's: `int.add(a, b)` and
-  `int.lt(i, n)` rather than `a + b` and `i < n`, with Core's precedences for
-  `==`, `&&`, `==>`. A `RelExpr` *becomes* a Core expression, and the same text
-  appears in the statements on either side of the `|`, so having it group one
-  way in a `while` guard and another in an `ensures` would be a trap. Core has
-  no infix arithmetic; neither does this.
-
-  Grouping in a relational formula is `{ … }`, not `( … )`. `Both (e)` already
-  spends `( … )` on a Core expression, and a formula's operands are Core
-  expressions throughout, so `( … )` in formula position would be ambiguous.
-  RelRL brackets a whole assertion the same way — `ensures { … }`.
-
-- **Every relational form is written with source names; the translator primes.**
-  `Both (i == n)` lowers to `i == n && i' == n'` — `prime_expr` applies to the
-  expression exactly the substitution `prime_stmts` applies to the right side's
-  statements, from the same bi-local set. No form makes the user write a prime:
-  where the two sides genuinely differ, `l =:= r` relates a left expression to a
-  right one (`last =:= int.add(int.mul(last, 2), 1)` is `last == 2 * last' + 1`),
-  which is WhyRel's spelling and keeps `'` out of the surface syntax entirely.
+  as its own singleton `StrataDDM.Program` cannot survive a shared elaboration
+  scope: a de Bruijn index from an enclosing context means nothing in a fresh
+  program, and Core miscompiles before aborting. `TransM`, `translateStmt` and
+  `translateBlock` are public and thread bindings in and out, so the translator
+  follows the grammar's `@[scope(…)]` chain exactly — by hand, and the two must
+  be kept in step.

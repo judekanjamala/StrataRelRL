@@ -19,15 +19,26 @@ namespace Strata.RelRL.Cli
 
 /-! # Shared CLI plumbing
 
-The three commands each live in their own module beside this one, mirroring
-`docs/workflows/`. What they share is here: getting a `.relrl.st` file parsed,
+The three commands each live in their own module beside this one, each
+documenting its own invocation, output and exit codes. What they share is here: getting a `.relrl.st` file parsed,
 and turning translation diagnostics into output and an exit code.
 
 Every command reuses `Strata.Cli.Framework`, as the built-in `Core`/`Laurel`
 commands do. -/
 
 /-- Preload `Core` and `RelRL` (plus DDM builtins) so `.relrl.st` files parse
-without an `--include` search path. -/
+without an `--include` search path.
+
+Both dialects are compiled into the binary (`Grammar.lean`), and this hands them
+to the parser as data. Selection is then per input file: the `program RelRL;`
+header names the dialect, looked up by name in the preloaded `LoadedDialects`; a
+miss falls through to the `DialectFileMap`, empty unless `--include` was passed,
+and the run fails with `Unknown dialect …`.
+
+`--include <dir>` is the one path that loads a dialect at run time, scanning for
+`.dialect.st` files and registering them for lazy loading
+(`StrataDDM/Elab/LoadedDialects.lean`). RelRL never needs it — its own dialect is
+compiled in, so it is always found first. -/
 def build_relrl_dialect_file_map (pflags : ParsedFlags) : IO StrataDDM.DialectFileMap := do
   let preloaded := StrataDDM.Elab.LoadedDialects.builtin
     |>.addDialect! Strata.Core

@@ -55,9 +55,18 @@ structure DeclName where
   satisfy a later reference. -/
   outlives : Bool
 
-/-- `verify` fuses the two sides by self-composition; `project` keeps one of them
-as a unary program, unprimed and stripped of relational formulas
-(`docs/workflows/project.md`). -/
+/-- Which reading of the bicommand is being produced.
+
+`.verify` puts both programs in one procedure, the right one primed. `.project`
+drops everything that exists only because they share a scope: it keeps one
+side's statements from every bicommand in order and nothing of the other's; it
+renames nothing, since with one side alone there is nobody to collide with; and
+it drops every relational formula — spec, `Assert`, `Assume`, loop invariant —
+because a formula names both sides and says nothing about one alone. The result
+is an ordinary unary program, one procedure per `biproc` under its own name.
+
+`.project` is not only for printing: `bi_while` lowers its body through it to
+get the steps only one side takes. -/
 inductive Mode where
   | verify
   | project (side : Side)

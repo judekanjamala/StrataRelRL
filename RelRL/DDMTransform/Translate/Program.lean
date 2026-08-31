@@ -30,8 +30,8 @@ is then an ordinary Core `assert` over both.
 Lowering runs inside Core's `TransM`, threading its `TransBindings` from one
 side to the next. **That threading mirrors the `@[scope(…)]` chain in
 `Grammar.lean` and must be kept in step with it** — see CLAUDE.md, "The other
-invariant". `docs/workflows/pipeline.md` walks the stages; `docs/design.md`
-argues the choices.
+invariant". `docs/workflows.md` relates the workflows; `docs/design.md` argues
+the choices.
 -/
 
 /-- Spec clauses to Core statements — `assume` for `requires`, `assert` for

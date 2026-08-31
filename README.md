@@ -21,7 +21,7 @@ Requires an SMT solver on `PATH` (cvc5 by default).
 `Main.lean` + `RelRL/Cli/` define a self-contained `lean_exe` built on the
 shared `Strata.Cli.Framework` from the `Strata` dependency, so no
 `Strata-CLI` checkout is involved. One module per command, matching
-`docs/workflows/`.
+`docs/workflows.md`.
 
 ```console
 $ lake exe relrl verify RelRL/Examples/Assertions.relrl.st
@@ -63,6 +63,7 @@ text names `strata` rather than `relrl`. Fix is upstream)
 
 | Path | Role |
 | --- | --- |
+| `RelRL.lean` | library root: grammar, translation, verification, no CLI |
 | `RelRL/DDMTransform/Grammar.lean` | the `#dialect RelRL … #end` declaration |
 | `RelRL/DDMTransform/Translate/` | `StrataDDM.Program` → `Core.Program`, one module per stage |
 | `RelRL/DDMTransform/Translate.lean` | imports the six, so callers see one module |
@@ -81,7 +82,7 @@ everything else goes; keep them honest when adding.
 | Doc | Holds |
 | --- | --- |
 | [`docs/status.md`](docs/status.md) | what works today, and every difference from WhyRel |
-| [`docs/workflows/`](docs/workflows/) | one file per workflow — build, verify, toCore, project — plus the pipeline they share |
+| [`docs/workflows.md`](docs/workflows.md) | how the workflows relate; each command is documented in its own module |
 | [`docs/design.md`](docs/design.md) | the design decisions and why they went that way |
 | [`docs/issues.md`](docs/issues.md) | known defects, each traced to its root cause |
 

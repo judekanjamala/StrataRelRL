@@ -19,9 +19,11 @@ public section
 -- `StrataDDM.Dialect` value and shadows the `Core` *namespace* holding
 -- `Core.Program`, `Core.VCResult`. Hence the `_root_.Core.` prefixes below.
 
-/-- Translate `p` to Core, then verify it via `Strata.Core.verifyProgram` —
-Core's tempDir/vcDirectory handling, SMT discharge and `VCResults` reporting,
-unchanged. Translation diagnostics come back alongside the results.
+/-- Stage 3 of the pipeline: translate `p` to Core, then hand it to
+`Strata.Core.verifyProgram` — Core's tempDir/vcDirectory handling, SMT discharge
+and `VCResults` reporting, unmodified. Everything that makes an obligation
+*relational* was built in stage 2; nothing downstream of here knows about
+bicommands. Translation diagnostics come back alongside the results.
 
 A fatal diagnostic means the Core program is not the one the source denotes, so
 verification is skipped: `verifyProgram` throws on such a program, and that

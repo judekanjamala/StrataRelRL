@@ -15,6 +15,12 @@ public section
 
 namespace Strata
 
+-- `#dialect … #end` is a Lean *elaborator*: it runs at `lake build` time and
+-- emits a compiled constant `Strata.RelRL : StrataDDM.Dialect` into this
+-- module's `.olean`. The grammar is therefore a build product, not a file read
+-- at run time — an ill-formed rule is a compile error pointing here, `relrl`
+-- never opens this file, and a `#strata … #end` block elsewhere tests the same
+-- compiled `Dialect`. `Cli/Common.lean` hands the constant to the parser.
 #dialect
 dialect RelRL;
 import Core;

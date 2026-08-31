@@ -45,5 +45,5 @@ get the steps only one side takes.
 | `Bicommands` | lowers one bicommand, of any form, and folds over a nested sequence |
 | `Program` | lowers specs and parameters, assembles each `biproc` into a Core procedure, and walks the top level |
 
-`docs/workflows/pipeline.md` walks the stages end to end; `docs/design.md`
-argues the choices. -/
+`docs/workflows.md` relates the workflows; `docs/design.md` argues the
+choices. -/
