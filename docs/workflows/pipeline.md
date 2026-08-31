@@ -176,8 +176,8 @@ def verify (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := ..)
     IO (_root_.Core.VCResults × Array Message)
 ```
 
-`Strata.Core.verifyProgram` runs Core's
-existing VC-generation and SMT-discharge pipeline unmodified.
-`verify_to_messages` is a convenience wrapper that formats both the
-translation diagnostics and one `Message` per proof obligation.
+`Strata.Core.verifyProgram` runs Core's existing VC-generation and
+SMT-discharge pipeline unmodified. A fatal translation diagnostic means the Core
+program is not the one the source denotes, so verification is skipped rather
+than run on it.
 

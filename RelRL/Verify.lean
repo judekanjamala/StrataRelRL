@@ -8,8 +8,6 @@ module
 
 public import RelRL.DDMTransform.Translate
 public import Strata.Languages.Core
-public import Strata.Pipeline.Messages
-public import StrataDDM.Integration.Lean
 
 namespace Strata
 namespace RelRL
@@ -36,17 +34,6 @@ def verify (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := Inhabited
   let vcResults ← EIO.toIO (fun m => IO.Error.userError m)
     (Strata.Core.verifyProgram coreProgram options)
   return (vcResults, diagnostics)
-
-/-- Convenience wrapper returning only formatted `Message`s (translation
-diagnostics plus one message per proof obligation), for CLI-style reporting. -/
-def verify_to_messages (p : StrataDDM.Program) (ictx : Lean.Parser.InputContext := Inhabited.default)
-    (options : _root_.Core.VerifyOptions := .default) : IO (Array Message) := do
-  let (vcResults, diagnostics) ← verify p ictx options
-  let vcMessages := vcResults.map fun vcr =>
-    let fr := (Imperative.getFileRange vcr.obligation.metadata).getD FileRange.unknown
-    let kind : MessageKind := if vcr.isSuccess then .warning else .userError
-    Message.withRange fr s!"[{vcr.obligation.label}]: {vcr.formatOutcome}" kind
-  return diagnostics ++ vcMessages
 
 end
 end RelRL
