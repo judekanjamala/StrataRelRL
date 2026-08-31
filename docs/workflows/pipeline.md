@@ -52,6 +52,11 @@ carrying its `SourceRange` and dialect-declared metadata.
   returns, which holds only while each command contributes exactly one;
   `misaligning_command?` refuses the two that do not, in any mode, rather than
   lower a body against a short list — [`issues.md`](../issues.md).
+- `lower_params` turns each side's Core `Bindings` into the procedure's inputs
+  and outputs through Core's own `translateProcBindings`, primes the right
+  side's names, and hands back both as `DeclName`s so the per-side checks treat
+  a parameter as declared. Under `project` only the kept side survives,
+  unprimed.
 - `lower_biproc` emits the `requires` assumptions, then the body, then the
   `ensures` obligations. `requires` is lowered against the *incoming* bindings,
   matching its lack of `@[scope(…)]`; `ensures` against the bindings the body

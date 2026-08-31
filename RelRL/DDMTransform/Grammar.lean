@@ -120,10 +120,10 @@ op bi_assert (r : RFormula) : Bicommand => "Assert { " r " } ;";
 op bi_assume (r : RFormula) : Bicommand => "Assume { " r " } ;";
 
 // ---- Specs ------------------------------------------------------------
-// Above the body, Boogie-style, either repeatable. `requires` carries no
-// `@[scope(...)]`, so it sees only top-level declarations; `ensures` carries
-// `@[scope(body)]` and sees bi-locals. That asymmetry is the point of the
-// split — docs/design.md.
+// Above the body, Boogie-style, either repeatable. `requires` is scoped to the
+// parameters, so it sees those and top-level declarations but nothing the body
+// declares; `ensures` carries `@[scope(body)]` and sees bi-locals too. That
+// asymmetry is the point of the split — docs/design.md.
 category RelRequires;
 op rel_requires (r : RFormula) : RelRequires => "\n  requires { " r " }";
 
@@ -134,9 +134,21 @@ op rel_ensures (r : RFormula) : RelEnsures => "\n  ensures { " r " }";
 // `ens` is declared after `body` so `@[scope(body)]` can refer back to it; DDM
 // elaborates arguments in declaration order, not syntax order. No trailing
 // ";": every bicommand already ends with one.
-op biproc (name : Ident, reqs : Seq RelRequires, body : Seq Bicommand,
+// Each side's parameters are a Core `Bindings`, so `out`/`inout` and
+// `translateProcBindings` come for free. That is why the parens are per side
+// rather than around the pair as WhyRel writes them — docs/status.md records
+// the spelling difference.
+category BiBindings;
+@[scope(r)]
+op bi_bindings (l : Bindings, @[scope(l)] r : Bindings) : BiBindings => l " |" r;
+
+// `requires` sees the parameters but not the body; `ensures` sees both. That
+// asymmetry is the point of the split — docs/design.md.
+op biproc (name : Ident, params : Option BiBindings,
+           @[scope(params)] reqs : Seq RelRequires,
+           @[scope(params)] body : Seq Bicommand,
            @[scope(body)] ens : Seq RelEnsures) : Command =>
-  "biproc " name reqs ens " =\n  " indent(2, body);
+  "biproc " name params reqs ens " =\n  " indent(2, body);
 
 #end
 

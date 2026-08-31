@@ -21,6 +21,7 @@ lake exe relrl verify RelRL/Examples/Swap.relrl.st        # expect 2/2 passed
 lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 4/4 passed
 lake exe relrl verify RelRL/Examples/Branching.relrl.st   # expect 5/5 passed
 lake exe relrl verify RelRL/Examples/Loops.relrl.st       # expect 20/20 passed
+lake exe relrl verify RelRL/Examples/Params.relrl.st      # expect 3/3 passed
 lake exe relrl toCore RelRL/Examples/Swap.relrl.st        # print the translated Core program
 lake exe relrl project RelRL/Examples/Swap.relrl.st --side left   # one side alone, as Core
 ```

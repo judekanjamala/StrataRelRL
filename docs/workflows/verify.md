@@ -140,8 +140,9 @@ deliberate change that belongs in the same commit as this table.
 | `BiVar.relrl.st` | 4/4 pass | 0 | `Var` in all three forms, with and without a repeated name, against `\|- … -\|` |
 | `Branching.relrl.st` | 5/5 pass | 0 | `If` with and without `else`, and `If4`; the guard-agreement obligation |
 | `Loops.relrl.st` | 20/20 pass | 0 | `While` lockstep and with alignment guards, `WhileL`, `WhileR`, `invariant` |
+| `Params.relrl.st` | 3/3 pass | 0 | parameters and returns, symmetric and not, `inout`, a load-bearing `requires` |
 
-`toCore` and `project --side left|right` should exit 0 on all six.
+`toCore` and `project --side left|right` should exit 0 on all seven.
 
 ## Flags
 

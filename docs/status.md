@@ -30,6 +30,12 @@
   synchronized bicommand, a split's own declaration, or a one-sided `Var`. So
   `s =:= t` reads as `s == t'`, and a colliding declaration is reported against
   its own source range rather than by Core against the fused program.
+- **Biproc parameters and returns.** `biproc m (n : int, out result : int) |
+  (n : int, out result : int)` gives the Core procedure inputs `n`, `n'` and
+  outputs `result`, `result'`. Each side is a Core `Bindings`, so `out` and
+  `inout` come from Core unchanged. This is what makes `requires` mean
+  something: a precondition can relate the two sides' inputs.
+  `RelRL/Examples/Params.relrl.st`.
 - **Conditionals.** `If e|e' then CC else DD end` and its else-less form put
   both sides under one Core `if`, which is sound because the guards are proved
   to agree first — that obligation is the point of the form. `If4 e|e'` is for
@@ -51,9 +57,9 @@
 - **Relational assertions**, in a two-layer language ported from RelRL's
   `rformula` — as an `Assert { R }` anywhere in the body, seeing both sides as
   they stand at that point, or as `requires`/`ensures` clauses above the body,
-  Boogie-style and repeatable. `requires` is assumed on entry, so it can only
-  name the file's top-level Core declarations; `ensures` is asserted on exit and
-  can name bi-locals:
+  Boogie-style and repeatable. `requires` is assumed on entry, so it names the
+  parameters and the file's top-level Core declarations, but nothing the body
+  declares; `ensures` is asserted on exit and can also name bi-locals:
 
   ```
   biproc sum
@@ -95,15 +101,12 @@
 
 Ordered by cost, not by importance — correct this if the priorities are wrong.
 
-1. **Biproc parameters and returns.** The largest blocker, and the only item
-   left that needs no heap. WhyRel's `meth m (n:int|n:int) : (int|int)` has no
-   equivalent, and without it there is no `result`, no call between biprocs, and
-   no `bimodule` layer — and `requires` stays thin, since a precondition has
-   only top-level constants to talk about.
-2. **A loop `variant`.** WhyRel's is a *bi*-expression and Core's loop measure
-   is one expression, so the two do not line up without a decision about which
-   side measures. Loops verify for partial correctness without it.
-3. **Fix the `datatype` misalignment upstream**, which would let the guard in
+1. **Calls between biprocs.** Parameters and returns exist now, so a call
+   bicommand is the next step: it needs the callee's relational spec at the call
+   site, which in turn wants `requires`/`ensures` lowered to Core's own
+   pre/postconditions rather than to `assume`/`assert` inside the body. That
+   also unlocks the `bimodule` layer.
+2. **Fix the `datatype` misalignment upstream**, which would let the guard in
    `misaligning_command?` be deleted — [`issues.md`](issues.md).
 
 Everything in [Not implemented](#not-implemented) below that is not listed here
@@ -123,6 +126,11 @@ under `examples/all_all/`.
 | `Var x:T \| y:T in CC` | `Var x:T \| y:T ;` | No `in CC`; a bicommand sequence is already the scope |
 | `Both f` | `Both (e)` | Parens mandatory — the operand is a Core expression |
 | `While e\|e' . do … done` | `While e\|e' do … done` | Lockstep is its own op rather than an empty alignment guard; DDM has no optional-with-separator form |
+| `meth m (n:int\|n:int) : (int\|int)` | `biproc m (n : int, out result : int) \| (n : int, out result : int)` | Each side is a Core `Bindings`, so `out`/`inout` and `translateProcBindings` are reused; the return is a named `out` rather than an implicit `result`, which a translator cannot bind into DDM's elaborator |
+
+`result` is not a keyword: it is whatever the `out` binding is called. Naming it
+`result` on both sides recovers WhyRel's spelling, and `Agree result` then means
+what it does there.
 
 `=:=`, `Agree x`, `<| … <]`, `[> … |>`, `~ /\ \/ => <=>`, `Assert { R }` and the
 placement of `requires`/`ensures` above the body all match WhyRel as written.
@@ -142,9 +150,10 @@ whole design rests on. See `docs/design.md`.
   refperm) and `HavocR x { R }` (all-exists mode only). Everything else WhyRel's
   parser accepts is implemented: split, synchronized, `Var`, `Assert`, `Assume`,
   `If`, `If4`, `While`, `WhileL`, `WhileR`.
-- **Loop `effects` and `variant`.** WhyRel's `biwhile_spec` carries both;
-  `effects` needs regions, and `variant` is a bi-expression against Core's
-  single loop measure.
+- **Loop `effects` and `variant`.** WhyRel's `biwhile_spec` carries both.
+  `effects` needs regions. `variant` measures the right side, and is not needed
+  for the forall-forall fragment RelRL targets, so it is omitted rather than
+  deferred.
 - **Datatypes and multi-function `rec` blocks alongside a `biproc`.** Rejected
   with a located error, because the biproc body's references to top-level
   declarations would silently misresolve — [`issues.md`](issues.md), "A
@@ -155,12 +164,12 @@ whole design rests on. See `docs/design.md`.
   predicates and coupling relations (`Rprimitive`, `named_rformula`), and
   everything needing a heap: region-image agreement (``Agree e`f``), refperm.
 - **Program structure.** No `interface` / `module` / `bimodule`, no classes,
-  objects, heap or regions, no `effects` clauses. In particular a `biproc` has
-  **no parameters or return values**, so WhyRel's
-  `meth fact (n:int|n:int) : (int|int)` has no equivalent — there is no `result`
-  and no way to call one biproc from another. That is what leaves `requires`
-  thin: with no parameters, a precondition can only constrain the file's
-  top-level Core declarations.
+  objects, heap or regions, no `effects` clauses, and no calls between biprocs.
+  Parameters and returns now exist, so WhyRel's
+  `meth fact (n:int|n:int) : (int|int)` has an equivalent; what is missing is
+  the call. `requires`/`ensures` lower to `assume`/`assert` inside the body
+  rather than to Core's own pre/postconditions, and a caller needs the contract,
+  not the body — so that is the first thing a call bicommand would change.
 - **Forall-exists.** Only the forall-forall fragment; no `-all-exists` mode.
 
 The heap is missing deliberately — the forall-forall examples being targeted

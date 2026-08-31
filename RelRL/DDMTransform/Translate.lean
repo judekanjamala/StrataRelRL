@@ -236,7 +236,10 @@ structure BodyState where
   diagnostics : Array Message := #[]
 
 /-- `TransM.error` needs a fallback value; `TransBindings` has all-default
-fields, so an empty accumulator is the natural one. -/
+fields, so an empty accumulator is the natural one. The `TransBindings` instance
+is for the same reason — Core does not declare one, and `lower_params` returns a
+tuple containing it. -/
+instance : Inhabited TransBindings := ⟨{}⟩
 instance : Inhabited BodyState := ⟨{ bindings := {} }⟩
 
 def collision_message (name : String) (side : Side) (core : String) (prev : DeclName) : String :=
@@ -676,24 +679,56 @@ def lower_spec_clauses (mode : Mode) (p : StrataDDM.Program)
     return (out, ds)
   | _, _ => TransM.error s!"biproc's {kind} argument is not a sequence"
 
+/-- Each side's parameters, as a Core `Bindings`. `translateProcBindings` does
+the work — including `out`/`inout` — and the right side's names are then primed,
+like every other right-side name. Also returns them as `DeclName`s, so the
+per-side checks in the body treat a parameter as declared.
+
+Under `project` only the kept side survives, unprimed: the printed program is
+that side alone. -/
+def lower_params (mode : Mode) (top : TransBindings) (params : Arg) :
+    TransM (@Lambda.LMonoTySignature Unit × @Lambda.LMonoTySignature Unit × List DeclName × TransBindings) := do
+  match params with
+  | .option _ none => return ([], [], [], top)
+  | .option _ (some (.op op)) =>
+    match op.args with
+    | #[l, r] =>
+      let (li, lo, b) ← translateProcBindings top l
+      let (ri, ro, b) ← translateProcBindings b r
+      let prime (sig : @Lambda.LMonoTySignature Unit) : @Lambda.LMonoTySignature Unit :=
+        sig.map fun (id, ty) => (⟨id.name ++ "'", ()⟩, ty)
+      let names (side : Side) (sig : @Lambda.LMonoTySignature Unit) : List DeclName :=
+        sig.map fun (id, _) => ⟨side.core_name id.name, id.name, side⟩
+      let declared := names .left li ++ names .left lo ++ names .right ri ++ names .right ro
+      match mode with
+      | .verify => return (li ++ prime ri, lo ++ prime ro, declared, b)
+      | .project .left => return (li, lo, declared, b)
+      | .project .right => return (ri, ro, declared, b)
+    | _ => TransM.error "biproc parameters are not a left/right pair"
+  | _ => TransM.error "biproc parameters are not an option"
+
 /-- `requires` assumptions, then the bicommands, then the `ensures` obligations.
 `requires` is lowered against the *incoming* bindings, matching its lack of
 `@[scope(…)]`; `ensures` against what the body ends with. -/
 def lower_biproc (mode : Mode) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext) (top : TransBindings)
-    (reqs : Arg) (body : Arg) (ens : Arg) :
-    TransM (List Core.Statement × Array Message) := do
+    (params : Arg) (reqs : Arg) (body : Arg) (ens : Arg) :
+    TransM (@Lambda.LMonoTySignature Unit × @Lambda.LMonoTySignature Unit ×
+            List Core.Statement × Array Message) := do
   match body with
   | .seq _ _ bicommands =>
-    -- `requires` has no `@[scope(…)]`, so nothing local is in scope for it.
-    let (pre, preDiags) ← lower_spec_clauses mode p ictx top [] "requires" true reqs
-    let mut st : BodyState := { bindings := top }
+    let (inputs, outputs, ps, top) ← lower_params mode top params
+    -- `requires` is scoped to the parameters, not the body: a precondition can
+    -- name what the caller supplies and nothing the body declares.
+    let (pre, preDiags) ← lower_spec_clauses mode p ictx top ps "requires" true reqs
+    let mut st : BodyState := { bindings := top, declared := ps }
     for bicommand in bicommands do
       st ← lower_bicommand mode p ictx st bicommand
     let done := st.flush
     let (post, postDiags) ←
       lower_spec_clauses mode p ictx done.bindings done.declared "ensures" false ens
-    return ((pre ++ done.out ++ post).toList, done.diagnostics ++ preDiags ++ postDiags)
+    return (inputs, outputs, (pre ++ done.out ++ post).toList,
+            done.diagnostics ++ preDiags ++ postDiags)
   | _ => TransM.error "biproc body is not a sequence of bicommands"
 
 /-- Commands that add more than one `freeVars` entry per decl they return, and
@@ -748,9 +783,9 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
   for op in p.commands do
     if misaligning.isEmpty && op.name == q`RelRL.biproc then
       match op.args with
-      | #[.ident _ name, reqs, body, ens] =>
-        let ((stmts, sourceErrors), errors) :=
-          TransM.run ictx (lower_biproc mode p ictx top reqs body ens) p.globalContext
+      | #[.ident _ name, params, reqs, body, ens] =>
+        let ((inputs, outputs, stmts, sourceErrors), errors) :=
+          TransM.run ictx (lower_biproc mode p ictx top params reqs body ens) p.globalContext
         for d in sourceErrors do
           emit_diagnostic d
         for e in errors do
@@ -762,11 +797,11 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
           | .project side => side.name
         let block : Core.Statement := .block label stmts md
         procs := [.proc
-          { header := { name := name, typeArgs := [], inputs := [], outputs := [] },
+          { header := { name := name, typeArgs := [], inputs := inputs, outputs := outputs },
             spec := { preconditions := [], postconditions := [] },
             body := .structured [block] } md] :: procs
       | _ =>
-        emit_invariant_violation "biproc does not have exactly four arguments"
+        emit_invariant_violation "biproc does not have exactly five arguments"
   return { decls := coreDecls ++ procs.reverse.flatten }
 
 /-- Fuse both sides by self-composition — what `verify` and `toCore` translate. -/

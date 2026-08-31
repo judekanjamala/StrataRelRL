@@ -92,6 +92,24 @@ are rejected by the parser:
   bicommand or a spec cannot see either copy. `docs/issues.md` records what
   that costs.
 
+- **A biproc's parameters are a Core `Bindings` per side.** `out` and `inout`,
+  and the whole of `translateProcBindings`, then come from Core unchanged — the
+  same reuse argument as for statements inside a bicommand. The cost is the
+  spelling: parens go around each side rather than around the pair as WhyRel
+  writes them.
+
+  The return is a named `out` binding rather than WhyRel's implicit `result`,
+  because `result` would have to be bound in *DDM's* elaborator for a spec to
+  name it, and a translator cannot reach in to do that. Naming the binding
+  `result` on both sides recovers WhyRel's spelling exactly, since the right
+  side is primed like any other name.
+
+  `requires` is scoped to the parameters and `ensures` to the body, so a
+  precondition can relate the two sides' inputs and nothing the body declares.
+  Both still lower to `assume`/`assert` inside the body rather than to Core's
+  own pre/postconditions; that is what a call between biprocs would need first,
+  since a caller reads the callee's contract, not its body.
+
 - **Conditionals collapse to one Core `if`, paid for by an obligation.**
   `If e|e' then CC else DD end` emits `assert e <=> e'` and then a *single*
   `if e { … }` holding both sides. Two `if`s, one per side, would not need the
@@ -168,10 +186,10 @@ are rejected by the parser:
   symmetric:
 
   `requires` is assumed on entry, when the body has declared nothing, so it
-  carries no `@[scope(…)]` and elaborates in the biproc's incoming scope — the
-  file's top-level Core declarations. Naming a bi-local in it is a scope error,
-  correctly: the variable does not exist yet. `ensures` is asserted on exit, so
-  it carries `@[scope(body)]` and can name bi-locals.
+  carries `@[scope(params)]` and elaborates in the biproc's incoming scope plus
+  its parameters. Naming a bi-local in it is a scope error, correctly: the
+  variable does not exist yet. `ensures` is asserted on exit, so it carries
+  `@[scope(body)]` and can name bi-locals as well.
 
   `ens` is declared *after* `body` in the operator's argument list so that
   `@[scope(body)]` can refer back to it, while the syntax still prints and
