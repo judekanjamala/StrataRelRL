@@ -37,6 +37,56 @@ local override in `Main.lean` works but is partial — `printIndented` and
 `exitCmdFailure` paths inside `parseArgs` stay wrong unless `parseArgs` is
 forked, risking drift from upstream's flag semantics.
 
+## A top-level declaration is shared by both programs
+
+**Unsound against WhyRel's semantics.** WhyRel gives each side its own state, so
+a global is two variables and the two programs may differ in it. Here a `const`
+is one symbol that both sides read, which makes agreement on anything derived
+from it free:
+
+```console
+$ cat glob.relrl.st
+const g : int;
+biproc p (out r : int) | (out r : int)
+  ensures { Agree r }
+=
+  << r := g; | r := g; >> ;
+
+$ relrl toCore glob.relrl.st       # r := g;  |r'| := g;   -- one `g`
+$ relrl verify glob.relrl.st
+All 1 goals passed.
+```
+
+`Agree r` should not be provable: nothing relates the two programs' `g`. Each
+should get its own copy, `g` and `g'`, as every bi-local does.
+
+The cause is that a Core constant is a 0-ary *function*, so a reference to it
+lowers to `.op "g"` and never to `.fvar "g"`. Every priming helper is built on
+`substFvar`, and every traversal in `Strata/DL/Lambda` passes `.op` through
+unchanged — there is no substitution over operator names anywhere in Lambda or
+Core (`NameMangling` is about monomorphization). Globals are therefore invisible
+to priming, and equally invisible to `fragment_names`, so `check_side` does not
+see them either.
+
+Fixing it has two halves. **Duplicate the declarations**: a `const` or function
+gets a primed copy, an `axiom` and a `distinct` get one with their references
+primed — otherwise `g'` is unconstrained while `g` is not — and a `procedure`
+gets one, since in WhyRel each side has its own. A `type` or `datatype` does not:
+a type is not program state.
+
+**Then rename references on the right**, for which there are two routes:
+
+- write an op-renaming traversal over `LExpr` and `Statement` — about thirty
+  lines, and the first traversal of Core's AST this translator would own; or
+- lower right-hand fragments against a *primed binding set*, a copy of the
+  top-level `TransBindings` with each declaration's name primed, so
+  `translateExpr` emits `.op "g'"` directly. That needs `bi_sync` to lower its
+  one statement twice, once per binding set, rather than once with a lexical
+  rename after.
+
+The first is contained and leaves the lexical-priming design intact; the second
+avoids a new traversal but reworks how priming is applied.
+
 ## A `datatype` breaks the top-level binding list a `biproc` body resolves against
 
 `translate_program_with` reconstructs Core's top-level binding list from the

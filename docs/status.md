@@ -191,11 +191,17 @@ first do not need one.
 - **Priming is visible.** WhyRel goes to Why3 with genuinely two-state formulas;
   RelRL lowers by self-composition, so the right side really is a set of
   variables named `a'`, and *every* name a right-hand fragment mentions is
-  renamed — which is what keeps a one-sided variable from being shared. Two
+  renamed — which is what keeps a one-sided variable from being shared. One
   consequence reaches the surface language: `Agree x` takes an `Ident` rather
   than an expression, since `x'` is a name lowering invents and DDM has nothing
   to elaborate it against — `docs/design.md`. The translator checks that operand,
   and every other name a side mentions, against what that side declared.
+- **A top-level declaration is shared, not duplicated.** WhyRel gives each side
+  its own state, so a global is two variables; here it is one that both programs
+  read, which makes `Agree` on anything derived from it free. A defect rather
+  than a deliberate divergence — [`issues.md`](issues.md), "A top-level
+  declaration is shared by both programs", has the cause and what fixing it
+  takes.
 - **A top-level `/\` is split** into one obligation per conjunct, for readable
   verifier output. RelRL's own, not WhyRel's.
 

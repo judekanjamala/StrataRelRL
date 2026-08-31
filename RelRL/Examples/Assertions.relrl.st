@@ -13,7 +13,8 @@ axiom [bound_pos]: int.gt(bound, 0);
 
 biproc sum
   // A spec names the parameters and the file's top-level declarations, never a
-  // bi-local; `bound` is shared by both sides, so it is nameable here.
+  // bi-local. Both sides read the same `bound` — docs/issues.md says why that
+  // is wrong and what it would take to give each its own.
   requires { Both (int.gt(bound, 0)) }
 =
   // Bi-locals: one name in the source, the pair `s`/`s'` in the translation.

@@ -97,17 +97,27 @@ points at the `issues.md` section that explains it.
   closes with `-|` rather than WhyRel's `_|`. The opener `|_` would have been
   fine; only the closer is unreachable.
 
-- **A spec keyword takes exactly one space.** The grammar's literal is
-  `"\n  ensures { "`, so aligning `ensures` under `requires` with two spaces is a
-  parse error — reported as `unexpected token 'ensures'; expected '='`, which
-  points at nothing useful.
+- **One literal, one token — so keep literals to one token each.** DDM trims a
+  syntax literal's outer whitespace and matches the rest as a *single* symbol
+  (`StrataDDM/Parser.lean`, the `.str` case: `symbolNoAntiquot l.trimAscii`).
+  Any space *inside* a literal is therefore part of the token and must be
+  reproduced exactly: `"\n  ensures { "` demands `ensures {` with one space, and
+  `ensures  {` fails with `unexpected token 'ensures'; expected '='`.
 
-- **Don't let a delimiter glue onto `;`.** An atom written `" };"` registers
-  `};` as a *single* token, which then swallows the `}` `;` of any other
-  construct. Write `" } ;"`, `">> ;"`, `"-| ;"`. The failure reads
-  `unexpected token '};'; expected '}'` at a line that looks fine. `");"` was
-  the worst case while the split bicommand used parentheses — it swallowed the
-  `)` `;` ending every Core call statement.
+  Write each token as its own atom — `"\nend" " ;"`, not `"\nend ;"` — and the
+  whitespace between them becomes free, newlines included. Printing is
+  unaffected: the formatter uses the untrimmed strings, so the output is
+  identical either way.
+
+  This also subsumes the older gluing hazard: an atom written `" };"` registers
+  `};` as one token, which then swallows the `}` `;` of any other construct
+  (`");"` once swallowed the `)` `;` ending every Core call statement). Two
+  atoms `" }"` `" ;"` cannot glue and are flexible besides.
+
+  One case resists splitting: `bi_var_left`'s `Var l | ;`. Its `|` and `;` are
+  separate atoms, so spacing and newlines around them are free, but writing
+  `|;` with no gap at all does not parse — `bi_var` is still a live alternative
+  at that point.
 
 ## The invariant worth protecting
 
@@ -153,13 +163,16 @@ changed. Change one, change the other.
 **Priming is not part of that chain, and must not become part of it.** A
 right-hand fragment is renamed against `fragment_names` — every variable *that
 fragment* mentions — not against a set accumulated alongside the scope chain.
-This is what makes the rename total: Core has no top-level variables (a
-constant is a 0-ary function, so it lowers to `.op`, never `.fvar`), so every
-name these helpers can reach is one of the two programs' locals, and on the
-right every one of them is the right program's. Reintroducing an *expected*-name
-list would let anything off it fall through to the left program's variable, and
-the two programs would silently share it — `docs/issues.md` records what that
-cost when the list was `BodyState.bilocals`.
+This is what makes the rename total *over the names it can reach*: a Core
+constant is a 0-ary function, so it lowers to `.op`, never `.fvar`, and every
+name these helpers see is one of the two programs' locals — on the right, the
+right program's. Reintroducing an *expected*-name list would let anything off it
+fall through to the left program's variable, and the two programs would silently
+share it.
+
+Globals fall outside that reach, and that is a defect rather than a boundary
+worth keeping: `docs/issues.md`, "A top-level declaration is shared by both
+programs".
 
 ## Reading the dependency
 

@@ -31,7 +31,7 @@ import Core;
 category RFormula;
 
 op rf_agree (x : Ident) : RFormula => "Agree " x;
-op rf_both (p : bool) : RFormula => "Both (" p ")";
+op rf_both (p : bool) : RFormula => "Both" " (" p ")";
 op rf_left (p : bool) : RFormula => "<| " p " <]";
 op rf_right (p : bool) : RFormula => "[> " p " |>";
 op rf_biequal (tp : Type, l : tp, r : tp) : RFormula => @[prec(15)] l " =:= " r;
@@ -50,25 +50,25 @@ category Bicommand;
 @[scope(r)]
 op bi_var (l : DeclList, @[scope(l)] r : DeclList) : Bicommand => "Var " l " | " r " ;";
 @[scope(l)]
-op bi_var_left (l : DeclList) : Bicommand => "Var " l " | ;";
+op bi_var_left (l : DeclList) : Bicommand => "Var " l " |" " ;";
 @[scope(r)]
-op bi_var_right (r : DeclList) : Bicommand => "Var | " r " ;";
+op bi_var_right (r : DeclList) : Bicommand => "Var" " | " r " ;";
 
 @[scope(c)]
-op bi_sync (c : Statement) : Bicommand => "|- " c " -| ;";
+op bi_sync (c : Statement) : Bicommand => "|- " c " -|" " ;";
 @[scope(right)]
 op bi_embed (left : NewlineSepBy Statement,
              @[scope(left)] right : NewlineSepBy Statement) : Bicommand =>
-  "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>> ;";
+  "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>>" " ;";
 
 op bi_if (lg : bool, rg : bool, thn : Seq Bicommand, els : Seq Bicommand) : Bicommand =>
-  "If " lg " | " rg " then\n  " indent(2, thn) "\nelse\n  " indent(2, els) "\nend ;";
+  "If " lg " | " rg " then\n  " indent(2, thn) "\nelse\n  " indent(2, els) "\nend" " ;";
 
 // WhyRel's else-less form, which its parser desugars to an else of Bisync
 // Skip. They are separate ops here because DDM has no way to
 // write that desugaring in the grammar.
 op bi_if_then (lg : bool, rg : bool, thn : Seq Bicommand) : Bicommand =>
-  "If " lg " | " rg " then\n  " indent(2, thn) "\nend ;";
+  "If " lg " | " rg " then\n  " indent(2, thn) "\nend" " ;";
 
 op bi_if4 (lg : bool, rg : bool, tt : Seq Bicommand, te : Seq Bicommand,
            et : Seq Bicommand, ee : Seq Bicommand) : Bicommand =>
@@ -76,34 +76,34 @@ op bi_if4 (lg : bool, rg : bool, tt : Seq Bicommand, te : Seq Bicommand,
   "\nthenThen\n  " indent(2, tt)
   "\nthenElse\n  " indent(2, te)
   "\nelseThen\n  " indent(2, et)
-  "\nelseElse\n  " indent(2, ee) "\nend ;";
+  "\nelseElse\n  " indent(2, ee) "\nend" " ;";
 
 category BiInvariant;
-op bi_invariant (r : RFormula) : BiInvariant => "\n  invariant { " r " }";
+op bi_invariant (r : RFormula) : BiInvariant => "\n  invariant" " { " r " }";
 
 // docs/design.md has the lowering and where it comes from.
 op bi_while (lg : bool, rg : bool, la : RFormula, ra : RFormula,
              invs : Seq BiInvariant, body : Seq Bicommand) : Bicommand =>
-  "While " lg " | " rg " . " la " | " ra " do" invs "\n  " indent(2, body) "\ndone ;";
+  "While " lg " | " rg " . " la " | " ra " do" invs "\n  " indent(2, body) "\ndone" " ;";
 
 op bi_while_lockstep (lg : bool, rg : bool, invs : Seq BiInvariant,
                       body : Seq Bicommand) : Bicommand =>
-  "While " lg " | " rg " do" invs "\n  " indent(2, body) "\ndone ;";
+  "While " lg " | " rg " do" invs "\n  " indent(2, body) "\ndone" " ;";
 
 op bi_while_left (g : bool, invs : Seq BiInvariant, body : Seq Bicommand) : Bicommand =>
-  "WhileL " g " do" invs "\n  " indent(2, body) "\ndone ;";
+  "WhileL " g " do" invs "\n  " indent(2, body) "\ndone" " ;";
 op bi_while_right (g : bool, invs : Seq BiInvariant, body : Seq Bicommand) : Bicommand =>
-  "WhileR " g " do" invs "\n  " indent(2, body) "\ndone ;";
+  "WhileR " g " do" invs "\n  " indent(2, body) "\ndone" " ;";
 
-op bi_assert (r : RFormula) : Bicommand => "Assert { " r " } ;";
-op bi_assume (r : RFormula) : Bicommand => "Assume { " r " } ;";
+op bi_assert (r : RFormula) : Bicommand => "Assert" " { " r " }" " ;";
+op bi_assume (r : RFormula) : Bicommand => "Assume" " { " r " }" " ;";
 
 // ---- Specs ------------------------------------------------------------
 category RelRequires;
-op rel_requires (r : RFormula) : RelRequires => "\n  requires { " r " }";
+op rel_requires (r : RFormula) : RelRequires => "\n  requires" " { " r " }";
 
 category RelEnsures;
-op rel_ensures (r : RFormula) : RelEnsures => "\n  ensures { " r " }";
+op rel_ensures (r : RFormula) : RelEnsures => "\n  ensures" " { " r " }";
 
 // Each side's parameters are a Core `Bindings`, so `out`/`inout` and
 // `translateProcBindings` come for free. That is why the parens are per side
