@@ -32,7 +32,7 @@ they do with the resulting `Core.Program`:
 Core.Program
    │
    ├── verify   → Strata.Core.verifyProgram → SMT → one line per obligation
-   ├── toCore   → print (both sides)
+   ├── toCore   → print (Composition)
    └── project  → print (one side)
 ```
 

@@ -198,3 +198,16 @@ present and future, and lets the guard be deleted. The dependency is unpinned
 Do not fix it by reimplementing `translateCoreDecls`'s dispatch inside RelRL:
 that duplicates a thirteen-case match against an unpinned dependency, which is
 the drift CLAUDE.md warns about.
+
+Nor by lowering a `biproc` into a Core `command_procedure` at the DDM level, so
+that nothing needs a reconstructed `top` at all. That is feasible but is a
+rewrite of the translator, not a fix. A `|- c -|` holds *one* fragment the two
+programs both run, so it must become two at different binder positions —
+duplication with re-indexing, against a scope-chain model RelRL would have to
+maintain by hand, with no `ExprF` index traversal upstream (`incIndices` and
+`instTypeM` are `TypeExprF`-only) and with references split between de Bruijn
+reads and lexical `lhsIdent` targets that must agree. It also trades ~1100 lines
+of typed `Core.Statement` construction for untyped `ArgF` arrays, where a shape
+error is a runtime failure rather than a type error. All to delete this guard
+and one line — against the two-line upstream change above. `docs/design.md`,
+"A `biproc` is lowered to Core terms".

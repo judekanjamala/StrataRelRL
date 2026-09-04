@@ -170,6 +170,21 @@
   a name it cannot read. `BodyState.check_side` reports that with the source
   range DDM would have used. `State.lean`.
 
+- **A `biproc` is lowered to Core terms, not rewritten into DDM ones.** The
+  alternative was source-to-source: rewrite `biproc` into a Core
+  `command_procedure` in `Desugar.lean`, leaving `translateCoreDecls` a
+  uniformly Core program — which would retire the reconstructed `top` above and
+  `misaligning_command?` with it.
+
+  Two things stop it. **Priming**, which is not a rename there: a `|- c -|`
+  holds one fragment both programs run, so it must become two at different
+  binder positions — duplication with re-indexing, and only `TypeExprF` has an
+  `incIndices`. On Core terms it is `substFvar`/`renameLhs` over names.
+  [`issues.md`](issues.md) costs it out. And **order**: `translateExpr` resolves
+  a body's `.fvar i` by indexing the *translated* declarations, so those must
+  exist before any body is lowered — a rewrite that produced them could not have
+  run first.
+
 - **Sugar is rewritten before lowering, not during it.** DDM has no way to
   express a desugaring in the grammar, so a form defined as another has to be
   eliminated somewhere. Doing it in `lower_bicommand` means writing the sugar's
