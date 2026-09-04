@@ -87,6 +87,64 @@ a type is not program state.
 The first is contained and leaves the lexical-priming design intact; the second
 avoids a new traversal but reworks how priming is applied.
 
+## Sibling blocks sharing a declared name lose every obligation
+
+Two Core blocks at the same level declaring the same name make Core's verifier
+return **no obligations at all** for the enclosing procedure, silently and with
+exit 0. This is Core's, not RelRL's — here is a repro with no bicommands in it:
+
+```console
+$ cat sib.relrl.st
+program Core;
+procedure m (out r : int, out s : int)
+  spec { ensures r == 1; }
+{
+  if (true) { var y : int := 1; r := y; }
+  if (true) { var y : int := 5; s := y; }
+};
+$ relrl verify sib.relrl.st
+All 0 goals passed.                      # exit 0
+```
+
+Rename the second `y` to `z` and the `ensures` comes back as a checked
+obligation that passes. Nothing is printed on stdout or stderr in the colliding
+case: the clause is not reported as failing, unknown, or skipped — it is simply
+absent, so a passing run means nothing. That is the worst available failure
+mode, and it is reachable from a hand-written Core file.
+
+Two things narrow it. `--verbose` shows `Type checking succeeded.` and then an
+empty `VCs:` list, so the program is accepted and it is VC *generation* that
+emits nothing — not the typechecker rejecting the second declaration. And the
+loss is per procedure: add a second, clean procedure to the file and it still
+verifies, so the summary reads `All 1 goals passed.` while `m` is checked for
+nothing at all. A healthy-looking run is therefore not evidence that every
+procedure in the file was checked.
+
+Past that the cause is upstream and untraced: the two blocks are well-scoped in
+the source, so something between block flattening and VC generation drops the
+procedure's obligations rather than renaming the shadowed declaration or
+rejecting it. Worth reporting with the repro above.
+
+**Contained, on RelRL's side.** A bicommand emits its statements into one flat
+block, so `if`s from two different bicommands become siblings and a repeated
+name reaches this directly. `refuse_declarations` in
+`Translate/Bicommands.lean` refuses *any* Core declaration inside a `|- … -|`
+or a split's side, nested ones included, which removes RelRL's route to it:
+
+```console
+$ relrl verify sides.relrl.st
+sides.relrl.st(5, (5-44)) `y` cannot be declared inside a split's side: `Var` is
+the only form that declares. Write `Var y : … | … ;` before the bicommand.
+Finished with 0 goals checked, but 1 error(s) occurred.   # exit 1
+```
+
+That refusal is not only containment — `Var` being the only binder is WhyRel's
+own rule, whose `|_ … _|` takes an `atomic_command` and whose only binder is
+`Var … in CC`. But it is what keeps the defect unreachable, so widen it, never
+loosen it, until the upstream fix lands. A `Var` cannot reach the defect: its
+declarations are top-level in the composed block, where a repeat is already
+reported as a collision against its own source range.
+
 ## A `datatype` breaks the top-level binding list a `biproc` body resolves against
 
 `translate_program_with` reconstructs Core's top-level binding list from the

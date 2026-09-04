@@ -16,20 +16,18 @@ public section
 /-! ## Priming
 
 A right-hand fragment is renamed apart before the two sides are emitted
-together.
-Both helpers fold Core's own substitution, so no traversal is written here.
+together. What gets primed is every program variable the fragment mentions —
+`fragment_names` below — and both helpers fold Core's own substitution, so no
+traversal is written here.
 
-**What gets primed is every program variable the fragment mentions.** Core has
-no top-level variables — a constant is a 0-ary function, so it lowers to `.op`
-and never to `.fvar` — which is what makes that safe: the only names these
-helpers can reach are the two programs' own locals, and on the right side every
-one of them belongs to the right program. Renaming against a list of *expected*
-names instead would let anything off that list fall through to the left
-program's variable; CLAUDE.md, "The other invariant", says not to. -/
+Why the rename is driven by the fragment rather than by a list of names it is
+expected to contain: `docs/design.md`, "## Translation". CLAUDE.md's second
+invariant says not to fold it into the scope chain. -/
 
-/-- Top-level declared names. One nested in an `if`/`while` body stays
-block-scoped, so it cannot collide across sides. Used for the collision check,
-not for priming. -/
+/-- Top-level declared names. One nested in an `if`/`while` body stays inside
+that block, so it neither collides across sides nor needs a `Var` to have
+declared it. Drives the `Var` collision check and the refusal of a declaration
+in a side; never priming. -/
 def top_level_declared (stmts : List Core.Statement) : List String :=
   stmts.filterMap fun
     | .init lhs _ _ _ => some lhs.name

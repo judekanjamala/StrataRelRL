@@ -19,8 +19,7 @@ namespace Strata.RelRL.Cli
 
 /-! # Shared CLI plumbing
 
-The three commands each live in their own module beside this one, each
-documenting its own invocation, output and exit codes. What they share is here: getting a `.relrl.st` file parsed,
+Common code for getting a `.relrl.st` file parsed,
 and turning translation diagnostics into output and an exit code.
 
 Every command reuses `Strata.Cli.Framework`, as the built-in `Core`/`Laurel`

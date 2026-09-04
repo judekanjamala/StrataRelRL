@@ -39,10 +39,37 @@
   1. **Statements inside a side are Core's.** `i := 0;` not `i := 0`,
      `int.add(a, b)` not `a + b`. Matching WhyRel means writing RelRL's own
      statement grammar and translator, giving up the reuse of `Core.getProgram`.
-  2. **`|- c -|`, not `|_ c _|`.** Forced: DDM's lexer cannot tokenize `_|`.
+  2. **`|- c -|`, not `|_ c _|`.** Forced by the lexer — below.
   3. **`<< c | c' >>`, not `( c | c' )`.** Preference — `(` is also Core's
      expression grouping, and `>>` cannot collide since Core has no infix `>`.
 
+- **Every literal in `Grammar.lean` is written as one token.** DDM trims a
+  syntax literal's outer whitespace and matches the rest as a *single* symbol
+  (`StrataDDM/Parser.lean`, the `.str` case: `symbolNoAntiquot l.trimAscii`), so
+  a space *inside* a literal is part of the token and must be typed exactly:
+  `"\n  ensures { "` demands `ensures {` with one space, and `ensures  {` fails
+  with `unexpected token 'ensures'; expected '='`. Writing each token as its own
+  atom — `"\nend" " ;"`, not `"\nend ;"` — makes the whitespace between them
+  free, newlines included, and printing is unaffected because the formatter uses
+  the untrimmed strings.
+
+  The alternative was worse than verbose. An atom written `" };"` registers
+  `};` as one token, which then swallows the `}` `;` of every *other* construct
+  — `");"` once swallowed the `)` `;` ending every Core call statement, which is
+  what made `( c | c' )` above a hazard as well as a preference. Two atoms
+  cannot glue.
+
+- **Two delimiters were settled by what DDM's lexer takes a character to
+  start.** A multi-character delimiter must not begin with `_`: DDM reads `_` as
+  an identifier start (`StrataDDM/Parser.lean:122`), so it consumes the `_` and
+  stops, and `_|` can never be a token. That is what forced `-|` for the
+  synchronized bicommand's closer; the opener `|_` would have been fine, only
+  the closer is unreachable. And `|` opens a pipe-delimited identifier,
+  SMT-LIB 2.6 style (`StrataDDM/Parser.lean:308`) — the same mechanism that
+  prints a primed name as `|result'|` in translated Core. So a `|` must be
+  followed by whitespace: `Var acc : int |;` fails with `unterminated
+  pipe-delimited identifier`, running to end of file, while `Var acc : int | ;`
+  is fine.
 
 - **A formula's operands are Core expressions, elaborated by DDM.** So
   `<| int.gt(n, 0) <]` and `l =:= r` work without RelRL owning an expression
@@ -61,7 +88,7 @@
 
 - **A `biproc` is called by `|- Call m (…) | (…) -| ;`, and lowers to *one*
   Core call.** WhyRel's `|_ m() _|` on a bimethod uses that method's relational
-  spec; the same thing here falls out of self-composition, because the callee's
+  spec; the same thing here falls out of the composition, because the callee's
   `biproc` already became one Core procedure whose contract *is* the relational
   one. Two calls would have used two unary specs, which is what a split already
   does. The fused procedure's inputs are the left side's then the right's, and
@@ -70,12 +97,15 @@
   of the right side. This is the form that makes a `biproc`'s spec a hypothesis
   rather than only an obligation.
 
-  Three spellings were forced. `Call` rather than Core's `call`, because after
-  `|- ` a Core `call` statement is already a live alternative and the callee is
-  not a Core procedure. Parens per side, for the same reason the declaration has
-  them. And an arity check in the translator, because Core's own message for a
-  mismatch arrives after the two lists have been fused into one and so names
-  neither the side nor a position.
+  Two spellings are preference, one is forced. `Call` rather than Core's
+  lowercase `call` reads with the dialect's other bicommand keywords — `Var`,
+  `If`, `While`, `Assert` — and keeps a biproc call visibly distinct from the
+  Core call a `|- … -|` may hold. Lowercase parses fine: `bi_sync` and `bi_call`
+  share the opening `|-`, but DDM's longest-match over the alternatives tells
+  them apart on what follows. Parens per side, for the same reason the
+  declaration has them. Forced is the arity check in the translator, because
+  Core's own message for a mismatch arrives after the two lists have been fused
+  into one and so names neither the side nor a position.
 
 - **A synchronized `biproc` call is refused inside `While e|e' . p|p' do`.**
   That form's one-sided steps are its body's `project`ions, and a projected
@@ -108,10 +138,25 @@
   impossible while they sit in `left:`/`right:` blocks, since a Core block's
   locals are invisible once it closes. Priming makes the two disjoint, so
   emitting both into one block is the standard forall-forall encoding — sound
-  precisely because after priming neither side can observe the other. That
-  soundness needs the rename to be *total* over the fragment, which is why it is
-  driven by what the fragment mentions rather than a list of expected names.
-  `Priming.lean`; CLAUDE.md's second invariant.
+  precisely because after priming neither side can observe the other, which is
+  what the next bullet has to deliver. `State.lean`.
+
+- **The rename is driven by what a fragment mentions, not by a list of expected
+  names.** The encoding above is sound only if priming is *total* over the
+  fragment: one name left unrenamed is one variable the two programs silently
+  share. Driving it from the fragment makes totality structural rather than a
+  property of a list someone has to maintain, and Core is what makes that
+  possible — it has no top-level variables, since a constant is a 0-ary function
+  that lowers to `.op` and never to `.fvar`. So every name these helpers can
+  reach is one of the two programs' own locals, and on the right side every one
+  of them belongs to the right program. An *expected*-name list would let
+  anything off it fall through to the left program's variable instead, which is
+  the same bug wearing a maintenance burden. `Priming.lean`; CLAUDE.md's second
+  invariant says not to fold this into the scope chain.
+
+  Globals are the one thing outside that reach, and that is a defect rather
+  than a boundary worth keeping — [`issues.md`](issues.md), "A top-level
+  declaration is shared by both programs".
 
 - **The translator scope-checks each side, because DDM cannot.** DDM threads one
   linear typing context, so a reference resolves without regard to which side of

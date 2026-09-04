@@ -15,21 +15,13 @@ public import RelRL.DDMTransform.Translate.Program
 
 /-! # RelRL to Core translation
 
-The aggregator. Nothing is defined here; this is the map.
-
-## The two workflows
-
-Both start from a parsed `StrataDDM.Program` and end in a `Core.Program`, and
-both run `translate_program_with` — they differ only in the `Mode` it carries,
-which every bicommand form reads.
+There are two types of translation: toCore and project. Both start from a parsed `StrataDDM.Program` and end in a `Core.Program`, and
+both run `translate_program_with`.
 
 | Entry point | Mode | Produces | Drives |
 |---|---|---|---|
-| `translate_program` | `.verify` | both programs in one procedure, the right one primed | `verify`, `toCore` |
-| `project_program side` | `.project side` | that side alone, unprimed, with every relational formula dropped — specs, `Assert`/`Assume`, loop invariants | `project` |
-
-A `biproc` becomes a Core procedure of the same name either way; every other
-top-level command is Core syntax and is handed to Core unchanged.
+| `translate_program` | `.compose` | both programs in one procedure, the right one primed
+| `project_program side` | `.project side` | that side alone, unprimed, with every relational formula dropped — specs, `Assert`/`Assume`, loop invariants
 
 `.project` is not only a printing aid: `bi_while` lowers its body through it to
 get the steps only one side takes.
@@ -44,6 +36,4 @@ get the steps only one side takes.
 | `State` | defines `Side` and `Mode`, carries the body accumulator, emits each bicommand into it, and checks declarations and names against what each side has |
 | `Bicommands` | lowers one bicommand, of any form, and folds over a nested sequence |
 | `Program` | lowers specs and parameters, assembles each `biproc` into a Core procedure, and walks the top level |
-
-`docs/workflows.md` relates the workflows; `docs/design.md` argues the
-choices. -/
+-/

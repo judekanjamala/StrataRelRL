@@ -63,8 +63,8 @@ points at the `issues.md` section that explains it.
   reasoning lives. `RelRL/Examples/Assertions.relrl.st` is the exception — its
   per-form annotations are the content.
 - **Do comment the non-obvious mechanics**, which are what a reader cannot
-  recover from the code: why a sequence is re-tagged `.newline`, why `ens` is
-  declared after `body`. Everything else, delete.
+  recover from the code: why a sequence is re-tagged `.newline`. Everything
+  else, delete.
 - When a fact moves, grep for it. Delimiters, op names and expected goal counts
   have all been restated in four places at once here.
 
@@ -92,38 +92,12 @@ points at the `issues.md` section that explains it.
 - **Inside `#dialect … #end`, comments are `//`, not `--`.** A `--` comment
   yields `expected token` at that line with no hint about why.
 
-- **A multi-character delimiter must not start with `_`.** DDM's lexer takes
-  `_` as an identifier start (`StrataDDM/Parser.lean:122`), so it reads `_` and
-  stops — `_|` can never be a token, which is why the synchronized bicommand
-  closes with `-|` rather than WhyRel's `_|`. The opener `|_` would have been
-  fine; only the closer is unreachable.
-
-- **One literal, one token — so keep literals to one token each.** DDM trims a
-  syntax literal's outer whitespace and matches the rest as a *single* symbol
-  (`StrataDDM/Parser.lean`, the `.str` case: `symbolNoAntiquot l.trimAscii`).
-  Any space *inside* a literal is therefore part of the token and must be
-  reproduced exactly: `"\n  ensures { "` demands `ensures {` with one space, and
-  `ensures  {` fails with `unexpected token 'ensures'; expected '='`.
-
-  Write each token as its own atom — `"\nend" " ;"`, not `"\nend ;"` — and the
-  whitespace between them becomes free, newlines included. Printing is
-  unaffected: the formatter uses the untrimmed strings, so the output is
-  identical either way.
-
-  This also subsumes the older gluing hazard: an atom written `" };"` registers
-  `};` as one token, which then swallows the `}` `;` of any other construct
-  (`");"` once swallowed the `)` `;` ending every Core call statement). Two
-  atoms `" }"` `" ;"` cannot glue and are flexible besides.
-
-  One case resists splitting: `bi_var_left`'s `Var l | ;`. Its `|` and `;` are
-  separate atoms, so spacing and newlines around them are free, but writing
-  `|;` with no gap at all does not parse — `bi_var` is still a live alternative
-  at that point.
-
-  Live alternatives bite elsewhere too: `bi_sync` and `bi_call` share the
-  opening `|-`, so the token after it is the whole distinction. Respelling
-  `Call` as Core's lowercase `call` makes an ordinary Core call statement — a
-  legal `bi_sync` body — ambiguous with a `bi_call`.
+- **DDM's tokenizer shapes the grammar, so check it before respelling a
+  literal.** Which literals can be tokens at all, why every atom in
+  `Grammar.lean` holds exactly one, and which characters cannot start one:
+  `docs/design.md`, "## Syntax". Respelling by eye breaks a form somewhere else
+  in the file — and test the change, since what looks like an ambiguity often
+  is not one.
 
 ## The invariant worth protecting
 
@@ -168,17 +142,9 @@ changed. Change one, change the other.
 
 **Priming is not part of that chain, and must not become part of it.** A
 right-hand fragment is renamed against `fragment_names` — every variable *that
-fragment* mentions — not against a set accumulated alongside the scope chain.
-This is what makes the rename total *over the names it can reach*: a Core
-constant is a 0-ary function, so it lowers to `.op`, never `.fvar`, and every
-name these helpers see is one of the two programs' locals — on the right, the
-right program's. Reintroducing an *expected*-name list would let anything off it
-fall through to the left program's variable, and the two programs would silently
-share it.
-
-Globals fall outside that reach, and that is a defect rather than a boundary
-worth keeping: `docs/issues.md`, "A top-level declaration is shared by both
-programs".
+fragment* mentions — never against a set accumulated alongside the bindings.
+The two look interchangeable while every example passes, and are not:
+`docs/design.md` has the argument, and what silently breaks.
 
 ## Reading the dependency
 

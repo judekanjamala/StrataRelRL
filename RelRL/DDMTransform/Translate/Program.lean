@@ -84,10 +84,10 @@ def lower_params (mode : Mode) (top : TransBindings) (params : Arg) :
       let prime (sig : @Lambda.LMonoTySignature Unit) : @Lambda.LMonoTySignature Unit :=
         sig.map fun (id, ty) => (⟨id.name ++ "'", ()⟩, ty)
       let names (side : Side) (sig : @Lambda.LMonoTySignature Unit) : List DeclName :=
-        sig.map fun (id, _) => ⟨side.core_name id.name, id.name, side, true⟩
+        sig.map fun (id, _) => ⟨side.core_name id.name, id.name, side⟩
       let declared := names .left li ++ names .left lo ++ names .right ri ++ names .right ro
       match mode with
-      | .verify => return (li ++ prime ri, lo ++ prime ro, declared, b)
+      | .compose => return (li ++ prime ri, lo ++ prime ro, declared, b)
       | .project .left => return (li, lo, declared, b)
       | .project .right => return (ri, ro, declared, b)
     | _ => TransM.error "biproc parameters are not a left/right pair"
@@ -184,7 +184,7 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
         let md := Imperative.MetaData.ofSourceRange (.file ictx.fileName) op.ann
         -- The block label says which reading of the bicommand this is.
         let label := match mode with
-          | .verify => "biproc"
+          | .compose => "biproc"
           | .project side => side.name
         let block : Core.Statement := .block label stmts md
         procs := [.proc
@@ -195,12 +195,12 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
         emit_invariant_violation "biproc does not have exactly five arguments"
   return { decls := coreDecls ++ procs.reverse.flatten }
 
-/-- Fuse both sides by self-composition — what `verify` and `toCore` translate. -/
+/-- Fuse both sides into one Core program, composed and primed apart. -/
 def translate_program (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext := Inhabited.default) : TranslateM Core.Program :=
-  translate_program_with .verify p ictx
+  translate_program_with .compose p ictx
 
-/-- Keep one side as an ordinary unary Core program — what `project` prints. -/
+/-- Project out a side as an ordinary unary Core program -/
 def project_program (side : Side) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext := Inhabited.default) : TranslateM Core.Program :=
   translate_program_with (.project side) p ictx

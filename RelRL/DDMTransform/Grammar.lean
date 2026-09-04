@@ -15,9 +15,7 @@ public section
 
 namespace Strata
 
--- `#dialect … #end` is a Lean *elaborator*: it runs at `lake build` time and
--- emits a compiled constant `Strata.RelRL : StrataDDM.Dialect` into this
--- module's `.olean`. The grammar is therefore a build product, not a file read
+-- ` The grammar is a build product, not a file read
 -- at run time — an ill-formed rule is a compile error pointing here, `relrl`
 -- never opens this file, and a `#strata … #end` block elsewhere tests the same
 -- compiled `Dialect`. `Cli/Common.lean` hands the constant to the parser.
@@ -60,16 +58,10 @@ op bi_var_left (l : DeclList) : Bicommand => "Var " l " |" " ;";
 @[scope(r)]
 op bi_var_right (r : DeclList) : Bicommand => "Var" " | " r " ;";
 
-// Neither declares: only `Var` extends the scope, as in WhyRel, where a
-// `|- … -|` holds an `atomic_command` and that grammar has no declaration form.
-// So no `@[scope(…)]` here, and `Translate/Bicommands.lean` does not thread
-// bindings out of either — CLAUDE.md, "The other invariant".
 op bi_sync (c : Statement) : Bicommand => "|- " c " -|" " ;";
 
-// WhyRel's `|_ m() _|` on a *bimethod*: the call site uses the callee's
-// relational spec, so a `biproc`'s contract is a hypothesis and not only an
 // obligation. `Call` rather than Core's `call` because the callee is a biproc
-// and the arguments come per side; docs/design.md.
+// and matches with rest of the Bicom style; docs/design.md.
 op bi_call (name : Ident, largs : CommaSepBy CallArg,
             rargs : CommaSepBy CallArg) : Bicommand =>
   "|- " "Call " name " (" largs ")" " |" " (" rargs ")" " -|" " ;";
@@ -97,7 +89,6 @@ op bi_if4 (lg : bool, rg : bool, tt : Seq Bicommand, te : Seq Bicommand,
 category BiInvariant;
 op bi_invariant (r : RFormula) : BiInvariant => "\n  invariant" " { " r " }";
 
-// docs/design.md has the lowering and where it comes from.
 op bi_while (lg : bool, rg : bool, la : RFormula, ra : RFormula,
              invs : Seq BiInvariant, body : Seq Bicommand) : Bicommand =>
   "While " lg " | " rg " . " la " | " ra " do" invs "\n  " indent(2, body) "\ndone" " ;";
@@ -129,8 +120,7 @@ category BiBindings;
 @[scope(r)]
 op bi_bindings (l : Bindings, @[scope(l)] r : Bindings) : BiBindings => l " |" r;
 
-// Both clauses are scoped to the parameters: a spec names what the caller can
-// see, never what the body declares. They become Core's own pre/postconditions,
+// Requires and ensures become Core's own pre/postconditions,
 // which is what makes `old x` mean the entry value — docs/design.md.
 op biproc (name : Ident, params : Option BiBindings,
            @[scope(params)] reqs : Seq RelRequires,

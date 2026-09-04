@@ -17,10 +17,10 @@ public section
 
 /-! # What a biproc body accumulates, and the checks over it
 
-`Side` and `Mode` say which program is being talked about and which reading of
-the bicommand is being produced; `BodyState` carries the rest. The checks here
-are what report a duplicate declaration or a one-sided name against the source,
-rather than leaving it to Core against the translated program. -/
+`Side` and `Mode` say which program is being talked about and what translation
+of the bicommand is being produced; `BodyState` carries the rest. The checks
+here are what report a duplicate declaration or a one-sided name against the
+source, rather than leaving it to Core against the translated program. -/
 
 /-- Which program a projection keeps. -/
 inductive Side where
@@ -37,8 +37,8 @@ def Side.name : Side → String
   | .left => "left"
   | .right => "right"
 
-/-- The Core name a source name takes on `side`. Self-composition fuses both
-programs into one Core scope, so this is the name that must be unique. -/
+/-- The Core name a source name takes on `side`. Composing the two programs
+puts them in one Core scope, so this is the name that must be unique. -/
 def Side.core_name : Side → String → String
   | .left, x => x
   | .right, x => x ++ "'"
@@ -49,26 +49,14 @@ structure DeclName where
   core : String
   source : String
   side : Side
-  /-- Whether a *later* bicommand may name it. True for parameters and `Var`,
-  false for what a `|- … -|` or a split declares — those are scoped to their own
-  bicommand, so they are recorded for uniqueness in the fused block but must not
-  satisfy a later reference. -/
-  outlives : Bool
 
-/-- Which reading of the bicommand is being produced.
-
-`.verify` puts both programs in one procedure, the right one primed. `.project`
-drops everything that exists only because they share a scope: it keeps one
-side's statements from every bicommand in order and nothing of the other's; it
-renames nothing, since with one side alone there is nobody to collide with; and
-it drops every relational formula — spec, `Assert`, `Assume`, loop invariant —
-because a formula names both sides and says nothing about one alone. The result
-is an ordinary unary program, one procedure per `biproc` under its own name.
-
-`.project` is not only for printing: `bi_while` lowers its body through it to
-get the steps only one side takes. -/
+/--
+`.compose` puts both programs in one procedure, the right one primed. `.project`
+keeps one side's statements from every bicommand in order and nothing of the
+other's. It drops every relational formula — spec, `Assert`, etc.
+ -/
 inductive Mode where
-  | verify
+  | compose
   | project (side : Side)
   deriving Repr
 
@@ -97,20 +85,20 @@ def collision_message (name : String) (side : Side) (core : String) (prev : Decl
     s!"`{name}` is declared twice in the {side.name} program"
   else
     s!"`{name}` in the {side.name} program collides with `{prev.source}` in the \
-       {prev.side.name} program: self-composition names both `{core}`"
+       {prev.side.name} program: composing the two names both `{core}`"
 
 /-- Record `names` as declared on `side`, reporting any the fused block already
-holds. Only `.verify` fuses; a projection is one unary program, which Core
+holds. Only `.compose` fuses; a projection is one unary program, which Core
 checks on its own. -/
 def BodyState.declare (s : BodyState) (fr : FileRange) (side : Side)
-    (outlives : Bool) (names : List String) : BodyState :=
+    (names : List String) : BodyState :=
   names.foldl (init := s) fun s name =>
     let core := side.core_name name
     match s.declared.find? (·.core == core) with
     | some prev =>
       { s with diagnostics := s.diagnostics.push <|
           Message.withRange fr (collision_message name side core prev) .userError }
-    | none => { s with declared := ⟨core, name, side, outlives⟩ :: s.declared }
+    | none => { s with declared := ⟨core, name, side⟩ :: s.declared }
 
 /-- `old x` lowers to an fvar named `"old x"` (`Core.CoreIdent.mkOld`), so a
 check against declared names has to look past the prefix. Priming needs no such
@@ -120,16 +108,16 @@ def strip_old (name : String) : String :=
     (name.drop Core.CoreIdent.oldStr.length).toString
   else name
 
-/-- Report any name `stmts` mentions that `side` has nothing declared for. The
-fragment's own declarations count. `declared` also holds split locals from
-earlier bicommands, which are block-scoped by then — so this under-reports
-rather than over-reports, which is the safe direction for a check whose job is
-to replace a Core error with a better one. -/
+/-- Report any name `stmts` mentions that `side` has nothing declared for. Every
+entry in `declared` is in scope by construction — only `Var` and the parameters
+put one there — so the check is against all of them. The fragment's own
+declarations count too, which is what lets a Core `var` nested in an `if` or
+`while` body be read below itself. -/
 def BodyState.check_side (s : BodyState) (fr : FileRange) (side : Side)
     (stmts : List Core.Statement) : BodyState :=
   let own := (Imperative.HasVarsImp.definedVars (P := Core.Expression) stmts false).map (·.name)
   let declared := s.declared.filterMap fun d =>
-    if d.side == side && d.outlives then some d.source else none
+    if d.side == side then some d.source else none
   (fragment_names stmts).foldl (init := s) fun s n =>
     let name := strip_old n
     if own.contains name || declared.contains name then s
@@ -145,7 +133,7 @@ def check_formula (declared : List DeclName) (fr : FileRange)
     (e : Core.Expression.Expr) : Array Message :=
   (expr_names e).foldl (init := #[]) fun ds n =>
     let name := strip_old n
-    if declared.any (fun d => d.core == name && d.outlives) then ds
+    if declared.any (fun d => d.core == name) then ds
     else
       -- Which program it would have belonged to, for the message. A left name
       -- spelled with a prime is rejected earlier, by the collision check.

@@ -42,7 +42,7 @@
 - **Projection.** `relrl project <file> --side left|right` prints the Core
   program for one side of every `biproc` alone — no priming, since nothing
   shares its scope, and no relational `ensures`, which names both sides. The
-  self-composition that `verify` checks and the two projections are the same
+  composed program that `verify` checks and the two projections are the same
   bicommand read three ways.
 - A standalone `relrl` CLI (`verify`, `toCore`, `project`) with no `Strata-CLI`
   dependency
@@ -57,7 +57,7 @@ under `examples/all_all/`.
 | WhyRel | RelRL | Why |
 |---|---|---|
 | `( c \| c' )` | `<< c \| c' >>` | Preference. `(` is also Core's expression grouping, and `) ;` risked registering `);` as one token — `docs/design.md` |
-| `\|_ c _\|` | `\|- c -\|` | Forced: DDM's lexer cannot tokenize `_\|` at all — `CLAUDE.md`, "Things that will bite" |
+| `\|_ c _\|` | `\|- c -\|` | Forced: DDM's lexer cannot tokenize `_\|` at all — [`design.md`](design.md) |
 | `Var x:T \| y:T in CC` | `Var x:T \| y:T ;` | No `in CC`; a bicommand sequence is already the scope |
 | `Both f` | `Both (e)` | Parens mandatory — the operand is a Core expression |
 | `While e\|e' . do … done` | `While e\|e' do … done` | Lockstep is its own op rather than an empty alignment guard; DDM has no optional-with-separator form |
@@ -79,6 +79,14 @@ and spells operators as functions — `int.add(a, b)`, `int.gt(s, 0)` rather tha
 `a + b`, `s > 0`. Deliberate: matching WhyRel here means writing RelRL's own
 statement grammar and translator, giving up the reuse of `Core.getProgram` the
 whole design rests on. See `docs/design.md`.
+
+One Core statement is not accepted there: a `var`. `Var` is the only form that
+declares, matching WhyRel, whose `|_ … _|` takes an `atomic_command` and whose
+only binder is `Var … in CC`. A `var` anywhere inside a `|- … -|` or a split's
+side — nested in an `if` or `while` body included — is refused against its own
+source range. Nesting is refused too because it is not merely redundant:
+[`issues.md`](issues.md), "Sibling blocks sharing a declared name lose every
+obligation".
 
 ### Other
 
@@ -132,8 +140,8 @@ whole design rests on. See `docs/design.md`.
 ### Where the semantics diverge
 
 - **Priming is visible.** WhyRel goes to Why3 with genuinely two-state formulas;
-  RelRL lowers by self-composition, so the right side really is a set of
-  variables named `a'`, and *every* name a right-hand fragment mentions is
+  RelRL composes the two programs into one, so the right side really is a set
+  of variables named `a'`, and *every* name a right-hand fragment mentions is
   renamed — which is what keeps a one-sided variable from being shared. One
   consequence reaches the surface language: `Agree x` takes an `Ident` rather
   than an expression, since `x'` is a name lowering invents and DDM has nothing
