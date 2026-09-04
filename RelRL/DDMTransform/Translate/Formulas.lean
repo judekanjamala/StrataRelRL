@@ -45,9 +45,6 @@ partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
     | q`RelRL.rf_right, #[e] =>
       let e ← translateExpr p bindings e
       return prime_expr (expr_names e) e
-    | q`RelRL.rf_both, #[e] =>
-      let e ← translateExpr p bindings e
-      return bool_app Core.boolAndOp [e, prime_expr (expr_names e) e]
     | q`RelRL.rf_biequal, #[_, l, r] =>
       let l ← translateExpr p bindings l
       let r ← translateExpr p bindings r

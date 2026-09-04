@@ -13,16 +13,19 @@
 
 ## How they relate
 
-All three run-time workflows walk the same two stages and differ only in what
+All three run-time workflows walk the same three stages and differ only in what
 they do with the resulting `Core.Program`:
 
 ```
 .relrl.st
    │
    │  ① parse            StrataDDM.readStrataText  ──►  StrataDDM.Program
-   ▼                       Grammar.lean declares the dialect
-   │  ② translate        translate_program_with
-   │                       ├── .verify           ──►  one procedure, right side
+   │                       Grammar.lean declares the dialect
+   │
+   │  ② desugar          desugar_program           ──►  StrataDDM.Program
+   ▼                       Desugar.lean; biproc bodies only
+   │  ③ translate        translate_program_with
+   │                       ├── .compose          ──►  one procedure, right side
    │                       │                          primed, spec as its contract
    │                       └── .project side   ──►  one side, unrenamed,
    ▼                                                  spec dropped
@@ -38,8 +41,10 @@ pipeline in the other lowering mode. When an obligation fails and the reason is
 not obvious, `toCore` shows the program the solver saw and `project` shows the
 two programs the spec is talking about.
 
-`Translate.lean`'s docstring maps stage 2 onto its six submodules;
-`Verify.lean` is stage 3; `docs/design.md` argues the choices.
+Stage ② runs inside `translate_program_with`, so it is not a separate entry
+point: every workflow gets it, and so does `bi_while`'s own re-lowering of its
+body. `Translate.lean`'s docstring maps stage ③ onto its six submodules;
+`Verify.lean` is the last one; `docs/design.md` argues the choices.
 
 ## Build
 
@@ -66,13 +71,13 @@ change belonging in the same commit as this table.
 
 | Example | Goals | Exercises |
 |---|---|---|
-| `Assertions.relrl.st` | 12/12 | every relational formula form, `requires` over a top-level constant |
-| `SeqBi.relrl.st` | 4/4 | a bicommand sequence with an `Assert` between the aligned steps |
+| `Assertions.relrl.st` | 13/13 | every relational formula form, `requires` over a top-level constant |
+| `SeqBi.relrl.st` | 5/5 | a bicommand sequence with an `Assert` between the aligned steps |
 | `Swap.relrl.st` | 6/6 | the WhyRel swap port: unary calls related through the callees' specs, aligned two ways |
 | `BiVar.relrl.st` | 4/4 | `Var` in all three forms, with and without a repeated name |
 | `Branching.relrl.st` | 5/5 | `If` with and without `else`, and `If4`; the guard-agreement obligation |
 | `Loops.relrl.st` | 20/20 | `While` lockstep and with alignment guards, `WhileL`, `WhileR`, `invariant` |
-| `Params.relrl.st` | 4/4 | parameters and returns, symmetric and not, `inout` with `old`, a load-bearing `requires` |
+| `Params.relrl.st` | 5/5 | parameters and returns, symmetric and not, `inout` with `old`, a load-bearing `requires` |
 | `BiCall.relrl.st` | 7/7 | `Call` on a `biproc`, twice in sequence over a bi-local, and once with the sides passing different arguments |
 
 All eight exit 0 under `toCore` and under `project` on either side.

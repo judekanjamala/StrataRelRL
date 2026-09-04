@@ -270,12 +270,6 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       | .project .right =>
         let (rs, _) ← lower_side p s.bindings r
         return { (s.emit rs []) with diagnostics := s.diagnostics ++ side_of r rs }
-    | q`RelRL.bi_if_then, #[lg, rg, thn] =>
-      -- WhyRel desugars the else-less form to an empty else; so does this, by
-      -- passing an empty sequence on to the same branch.
-      lower_bicommand mode p ictx s
-        (.op { ann := op.ann, name := q`RelRL.bi_if,
-               args := #[lg, rg, thn, .seq op.ann .newline #[]] })
     | q`RelRL.bi_if, #[lg, rg, thn, els] =>
       match mode with
       | .compose =>

@@ -6,6 +6,7 @@
 
 module
 
+public import RelRL.DDMTransform.Desugar
 public import RelRL.DDMTransform.Grammar
 public import RelRL.DDMTransform.Translate.Bicommands
 public import RelRL.DDMTransform.Translate.Diagnostics
@@ -138,6 +139,8 @@ what that cost. A `biproc` declares no top-level name, so filtering the
 bicommands out keeps the indices aligned. -/
 def translate_program_with (mode : Mode) (p : StrataDDM.Program)
     (ictx : Lean.Parser.InputContext := Inhabited.default) : TranslateM Core.Program := do
+  -- Once, before anything reads a body, so every mode lowers the same tree.
+  let p := desugar_program p
   let coreCommands := p.commands.filter (fun op => op.name != q`RelRL.biproc)
   -- `Core_map` holds Core and its imports, not `RelRL`. Sound only because
   -- `biproc` is filtered out above and no bicommand is reachable at top level;

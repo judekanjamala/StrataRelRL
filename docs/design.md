@@ -132,6 +132,12 @@
   transparent to the peeling; every other connective is opaque, since its parts
   are not separately provable.
 
+  `Both (e)` splits too, by being desugared to `<| e <] /\ [> e |>` before
+  lowering rather than lowered straight to a conjunction — same Core either way,
+  but the peeling can reach it, so a failure names the program it happened in
+  instead of reporting one obligation over both. Under any other connective it
+  stays opaque, like every other conjunction.
+
 ## Translation
 
 - **The sides are flattened, not nested.** An `ensures` naming both sides is
@@ -163,6 +169,22 @@
   the `|` it sits on; and Core's `Lhs` is lexical, so a side may even *assign* to
   a name it cannot read. `BodyState.check_side` reports that with the source
   range DDM would have used. `State.lean`.
+
+- **Sugar is rewritten before lowering, not during it.** DDM has no way to
+  express a desugaring in the grammar, so a form defined as another has to be
+  eliminated somewhere. Doing it in `lower_bicommand` means writing the sugar's
+  lowering against all of `Mode`; doing it in a pass over the parsed program
+  means one rewrite, seen by every mode and by `bi_while`'s re-lowering of its
+  own body. `Desugar.lean`.
+
+  The pass is over an *elaborated* program, which is the whole constraint on it:
+  an expression is already `ExprF.bvar i` against the `@[scope(…)]` chain, so a
+  rewrite that changes how many binders enclose a subterm silently rebinds every
+  index in it, and only `TypeExprF` has an `incIndices` to repair with. Hence
+  the rule stated on the module: no rewrite introduces, drops, reorders or lifts
+  out of a binder. That admits WhyRel's else-less `If` — an empty `else` binds
+  nothing — and rules out any sugar wanting a fresh temporary, which has to be
+  built in the lowering instead, where the terms are Core's.
 
 - **Top-level Core commands are translated in one pass.** A `.fvar i` indexes
   the program's top-level declarations. Translating each command in its own

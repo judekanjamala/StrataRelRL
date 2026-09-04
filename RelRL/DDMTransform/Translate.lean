@@ -30,6 +30,7 @@ get the steps only one side takes.
 
 | Module | Does |
 |---|---|
+| `../Desugar` | rewrites each surface form that is defined as another, before any body is lowered |
 | `Diagnostics` | collects located messages, so a bad program or a broken invariant is reported rather than aborting the run |
 | `Priming` | computes the names a fragment mentions, and renames a right-hand one apart |
 | `Formulas` | lowers a relational formula to one Core `bool`, and peels a top-level `/\` into separate conjuncts |

@@ -147,5 +147,6 @@ obligation".
   than an expression, since `x'` is a name lowering invents and DDM has nothing
   to elaborate it against — `docs/design.md`. The translator checks that operand,
   and every other name a side mentions, against what that side declared.
-- **A top-level `/\` is split** into one obligation per conjunct, for readable
-  verifier output. RelRL's own, not WhyRel's.
+- **A top-level `/\` is split** into one obligation per conjunct, and a
+  top-level `Both (e)` into one per program, for readable verifier output.
+  RelRL's own, not WhyRel's.
