@@ -8,7 +8,8 @@ module
 
 public import RelRL.DDMTransform.Desugar
 public import RelRL.DDMTransform.Grammar
-public import RelRL.DDMTransform.Translate.Bicommands
+public import RelRL.DDMTransform.Translate.Composition
+public import RelRL.DDMTransform.Translate.Projection
 public import RelRL.DDMTransform.Translate.Diagnostics
 public import Strata.Languages.Core.Verifier
 public import Strata.DL.Imperative.MetaData
@@ -107,13 +108,15 @@ def lower_biproc (mode : Mode) (p : StrataDDM.Program)
     TransM (@Lambda.LMonoTySignature Unit × @Lambda.LMonoTySignature Unit ×
             Core.Procedure.Spec × List Core.Statement × Array Message) := do
   match body with
-  | .seq _ _ bicommands =>
+  | .seq _ _ _ =>
     let (inputs, outputs, ps, top) ← lower_params mode top params
     let (pre, preDiags) ← lower_spec_clauses mode p ictx top ps "requires" reqs
     let (post, postDiags) ← lower_spec_clauses mode p ictx top ps "ensures" ens
-    let mut st : BodyState := { bindings := top, declared := ps }
-    for bicommand in bicommands do
-      st ← lower_bicommand mode p ictx st bicommand
+    -- The body is a sequence, which is what each lowering's own fold takes.
+    let st0 : BodyState := { bindings := top, declared := ps }
+    let st ← match mode with
+      | .compose => compose_seq p ictx st0 body
+      | .project side => project_seq side p ictx st0 body
     return (inputs, outputs, { preconditions := pre, postconditions := post },
             st.out.toList, st.diagnostics ++ preDiags ++ postDiags)
   | _ => TransM.error "biproc body is not a sequence of bicommands"
