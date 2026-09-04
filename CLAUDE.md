@@ -27,6 +27,17 @@ lake exe relrl toCore RelRL/Examples/Swap.relrl.st        # print the translated
 lake exe relrl project RelRL/Examples/Swap.relrl.st --side left   # one side alone, as Core
 ```
 
+WhyRel's case studies, under `RelRL/Examples/WhyRel/`. The last two reason about
+map *equality*, so they need `--use-array-theory` — see below.
+
+```console
+lake exe relrl verify RelRL/Examples/WhyRel/Factorial.relrl.st    # expect 15/15 passed
+lake exe relrl verify RelRL/Examples/WhyRel/EquivCheck.relrl.st   # expect 18/18 passed
+lake exe relrl verify RelRL/Examples/WhyRel/FizzBuzzSum.relrl.st  # expect 23/23 passed
+lake exe relrl verify --use-array-theory RelRL/Examples/WhyRel/FizzBuzz.relrl.st  # expect 21/21
+lake exe relrl verify --use-array-theory RelRL/Examples/WhyRel/SimpleIO.relrl.st  # expect 29/29
+```
+
 `lake exe` resolves and rebuilds; prefer it over `./.lake/build/bin/relrl`.
 Verification needs an SMT solver on `PATH` (cvc5 by default).
 
@@ -79,6 +90,15 @@ points at the `issues.md` section that explains it.
 - **The `Strata` dependency is unpinned** — `rev = "main"` in `lakefile.toml`.
   A build that breaks after `lake update` may be upstream drift rather than a
   local change. Check `git diff` before assuming it's your edit.
+
+- **A goal about `Map` *equality* is `unknown` without `--use-array-theory`.**
+  Core's SMT encoder sends `Map` to an uninterpreted sort by default
+  (`Core.VerifyOptions.default` has `useArrayTheory := false`), so `select`
+  and `store` work but extensionality and store-over-store do not:
+  `m[i := v][i := v] == m[i := v]` does not discharge. The flag encodes `Map` as
+  an SMT array instead and it does. Passing it is harmless where it is not
+  needed, so reach for it the moment a map-valued `Agree` or `==` goes
+  `unknown`.
 
 - **`warningAsError = true`.** An unused variable or a shake warning fails the
   build, not just warns.

@@ -46,6 +46,13 @@
   bicommand read three ways.
 - A standalone `relrl` CLI (`verify`, `toCore`, `project`) with no `Strata-CLI`
   dependency
+- **WhyRel's heap-free `all_all` case studies**, under
+  `RelRL/Examples/WhyRel/`: `factorial`, `equiv-check`, and both halves of
+  `Veracity/Fizzbuzz`, plus `Veracity/Simple_IO`. Two of the seven do not port:
+  `monofact` and `majorization` both state a cross-side *inequality*, which the
+  formula language cannot write — see "Not implemented" below. Where WhyRel
+  keeps mutable state in a module global, the port passes it `inout` instead,
+  which is also what gives each side its own copy.
 
 ## Differences from WhyRel
 
@@ -129,6 +136,14 @@ obligation".
 - **Formulas.** Quantifiers (`Rquant`), `let` (`Rlet`), named relational
   predicates and coupling relations (`Rprimitive`, `named_rformula`), and
   everything needing a heap: region-image agreement (``Agree e`f``), refperm.
+- **A cross-side relation other than equality.** WhyRel's `[< e <]` and
+  `[> e >]` embed one side's *value* into a formula, so any comparison can span
+  the two: `[< result <] > [> result >]`. RelRL's only cross-side atom is
+  `l =:= r`, and each operand is checked against the side that declared its
+  names, so an inequality between the two programs cannot be written at all.
+  This is what blocks `all_all/monofact` and `all_all/majorization` below; an
+  op alongside `rf_biequal` in `Grammar.lean`, translated the same way, is the
+  whole fix.
 - **Program structure.** No `interface` / `module` / `bimodule`, no classes,
   objects or regions, no `effects` clauses. Parameters, returns, unary calls and
   synchronized `biproc` calls all exist, so a relational spec is already usable

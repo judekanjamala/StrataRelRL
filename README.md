@@ -74,7 +74,8 @@ text names `strata` rather than `relrl`. Fix is upstream)
 | `RelRL/Cli/Project.lean` | the `project` command |
 | `RelRL/Cli.lean` | imports the four, so `Main.lean` sees one module |
 | `Main.lean` | standalone `relrl` executable |
-| `RelRL/Examples` | Dialect examples |
+| `RelRL/Examples` | Dialect examples, one per feature |
+| `RelRL/Examples/WhyRel` | WhyRel's `examples/all_all` case studies, ported |
 
 Each doc opens with a **Scope** note saying what belongs in it and where
 everything else goes; keep them honest when adding.
