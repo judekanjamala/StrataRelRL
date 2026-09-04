@@ -65,6 +65,14 @@ op bi_var_right (r : DeclList) : Bicommand => "Var" " | " r " ;";
 // So no `@[scope(…)]` here, and `Translate/Bicommands.lean` does not thread
 // bindings out of either — CLAUDE.md, "The other invariant".
 op bi_sync (c : Statement) : Bicommand => "|- " c " -|" " ;";
+
+// WhyRel's `|_ m() _|` on a *bimethod*: the call site uses the callee's
+// relational spec, so a `biproc`'s contract is a hypothesis and not only an
+// obligation. `Call` rather than Core's `call` because the callee is a biproc
+// and the arguments come per side; docs/design.md.
+op bi_call (name : Ident, largs : CommaSepBy CallArg,
+            rargs : CommaSepBy CallArg) : Bicommand =>
+  "|- " "Call " name " (" largs ")" " |" " (" rargs ")" " -|" " ;";
 op bi_embed (left : NewlineSepBy Statement,
              right : NewlineSepBy Statement) : Bicommand =>
   "<<\n  " indent(2, left) "\n|\n  " indent(2, right) "\n>>" " ;";

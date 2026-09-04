@@ -22,6 +22,7 @@ lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 4/4 passed
 lake exe relrl verify RelRL/Examples/Branching.relrl.st   # expect 5/5 passed
 lake exe relrl verify RelRL/Examples/Loops.relrl.st       # expect 20/20 passed
 lake exe relrl verify RelRL/Examples/Params.relrl.st      # expect 4/4 passed
+lake exe relrl verify RelRL/Examples/BiCall.relrl.st      # expect 7/7 passed
 lake exe relrl toCore RelRL/Examples/Swap.relrl.st        # print the translated Core program
 lake exe relrl project RelRL/Examples/Swap.relrl.st --side left   # one side alone, as Core
 ```
@@ -118,6 +119,11 @@ points at the `issues.md` section that explains it.
   separate atoms, so spacing and newlines around them are free, but writing
   `|;` with no gap at all does not parse — `bi_var` is still a live alternative
   at that point.
+
+  Live alternatives bite elsewhere too: `bi_sync` and `bi_call` share the
+  opening `|-`, so the token after it is the whole distinction. Respelling
+  `Call` as Core's lowercase `call` makes an ordinary Core call statement — a
+  legal `bi_sync` body — ambiguous with a `bi_call`.
 
 ## The invariant worth protecting
 

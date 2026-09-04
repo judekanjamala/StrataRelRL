@@ -73,8 +73,9 @@ change belonging in the same commit as this table.
 | `Branching.relrl.st` | 5/5 | `If` with and without `else`, and `If4`; the guard-agreement obligation |
 | `Loops.relrl.st` | 20/20 | `While` lockstep and with alignment guards, `WhileL`, `WhileR`, `invariant` |
 | `Params.relrl.st` | 4/4 | parameters and returns, symmetric and not, `inout` with `old`, a load-bearing `requires` |
+| `BiCall.relrl.st` | 7/7 | `Call` on a `biproc`, twice in sequence over a bi-local, and once with the sides passing different arguments |
 
-All seven exit 0 under `toCore` and under `project` on either side.
+All eight exit 0 under `toCore` and under `project` on either side.
 
 Nothing checks that `toCore` output re-parses; this repo does not build the
 `strata` binary that would consume it.

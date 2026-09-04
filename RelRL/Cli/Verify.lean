@@ -53,6 +53,11 @@ translation built.
   error: `Var n : int | n : int ;` declares `n` and `n'`, one per program.
 - **A `datatype` or multi-function `rec` block beside a `biproc`** — refused
   against the offending command, exit 1. `docs/issues.md` has the mechanism.
+- **A synchronized `Call` that no `biproc` answers, or whose argument list does
+  not match one side's parameters** — exit 1, against the call. The arity is
+  checked per side here because Core checks it only after the two sides have
+  been fused into one list. A `Call` inside a `While` with alignment guards is
+  refused the same way; `docs/design.md` says why it has no meaning there.
 - **A parse error** — reported against the source with a line and column, exit 1.
 
 ## Debugging a failure

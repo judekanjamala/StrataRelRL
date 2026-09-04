@@ -1,9 +1,7 @@
 # Design decisions
 
 > **Scope.** One bullet per decision: what was chosen, what was rejected, and
-> why. No usage, no mechanics — [`status.md`](status.md) says what exists,
-> [`issues.md`](issues.md) what is broken, `CLAUDE.md` what bites when editing,
-> and the code says how. Each bullet names the file that implements it.
+> why.
 
 ## Shape of the project
 
@@ -45,11 +43,6 @@
   3. **`<< c | c' >>`, not `( c | c' )`.** Preference — `(` is also Core's
      expression grouping, and `>>` cannot collide since Core has no infix `>`.
 
-- **Two layers, and no token shared between them.** A one-state Core expression
-  spells its connectives `&&`, `||`, `!`; a relational formula spells them
-  `/\`, `\/`, `~`, `=>`, `<=>`. The parser never has to decide which layer an
-  operator belongs to, and neither does a reader. Grouping in a formula is
-  `{ … }`, since `Both (e)` already spends `( … )` on a Core expression.
 
 - **A formula's operands are Core expressions, elaborated by DDM.** So
   `<| int.gt(n, 0) <]` and `l =:= r` work without RelRL owning an expression
@@ -57,39 +50,8 @@
   `x`/`x'`, and `x'` exists only after lowering, so there is nothing for DDM to
   resolve. `check_formula` checks that operand instead. `Formulas.lean`.
 
-- **Every relational form is written with source names.** No form makes the user
-  write a prime: `Both (i == n)` lowers to `i == n && i' == n'`, and where the
-  sides genuinely differ `l =:= r` relates a left expression to a right one.
-  That is WhyRel's spelling, and it keeps `'` out of the surface syntax.
-
-## What the bicommands mean
-
-- **`Var` is the only declaration form, and the only one that extends the
-  scope.** WhyRel draws the same line: its `|_ … _|` holds an `atomic_command`,
-  a grammar with no declaration form. Writing the same name on both sides is how
-  you say *both programs have this variable*, which is what `Agree` and `Both`
-  need. `Grammar.lean`.
-
-- **Conditionals collapse to one Core `if`, paid for by an obligation.**
-  `If e|e'` asserts `e <=> e'` and then puts both sides under a single `if`.
-  Two `if`s would need no assert, but would also stop a bicommand inside a
-  branch from relating the two states, which is the point of the form. `If4` is
-  for guards that need not agree and pays with four branches instead.
-  `Bicommands.lean`, following WhyRel's `compile_bicommand`.
-
-- **A loop's alignment guards decide who steps; the invariant rules out
-  deadlock.** `While e|e' . p|p'` becomes one loop guarded by `e \/ e'`, whose
-  body dispatches to the left projection, the right projection, or both. The
-  alignment condition is an *invariant*, not an assert: it is what rules out a
-  state where a side must step and its guard forbids it — WhyRel's Fault. The
-  one-sided steps are this translator's own `project` mode applied to the body,
-  which is why that mode is more than a printing aid. `Bicommands.lean`.
-
-- **A bicommand sequence is an alignment, and lowering interleaves per
-  element.** `(l₁|r₁); (l₂|r₂)` becomes `l₁; r₁; l₂; r₂`, WhyRel's order. A
-  sequence of two bicommands is therefore *not* the same Core as one bicommand
-  holding both statements per side — `Swap.relrl.st` writes both, as WhyRel
-  does. CLAUDE.md says what breaks if the order is changed.
+- The one-sided BiWhile steps are this translator's own `project` mode applied to the
+  body, which is why that mode is more than a printing aid. `Bicommands.lean`.
 
 - **A call inside a bicommand is Core's `call`, and needed nothing new.** A
   split's sides are Core `Statement`s and a call is one, so relating two
@@ -97,15 +59,36 @@
   resolves a call against the callee's `spec`. This is the reuse argument paying
   off rather than a feature that was added.
 
+- **A `biproc` is called by `|- Call m (…) | (…) -| ;`, and lowers to *one*
+  Core call.** WhyRel's `|_ m() _|` on a bimethod uses that method's relational
+  spec; the same thing here falls out of self-composition, because the callee's
+  `biproc` already became one Core procedure whose contract *is* the relational
+  one. Two calls would have used two unary specs, which is what a split already
+  does. The fused procedure's inputs are the left side's then the right's, and
+  so are its outputs, which is exactly the order the two argument lists
+  concatenate in — so the call site needs no reordering, only the usual priming
+  of the right side. This is the form that makes a `biproc`'s spec a hypothesis
+  rather than only an obligation.
+
+  Three spellings were forced. `Call` rather than Core's `call`, because after
+  `|- ` a Core `call` statement is already a live alternative and the callee is
+  not a Core procedure. Parens per side, for the same reason the declaration has
+  them. And an arity check in the translator, because Core's own message for a
+  mismatch arrives after the two lists have been fused into one and so names
+  neither the side nor a position.
+
+- **A synchronized `biproc` call is refused inside `While e|e' . p|p' do`.**
+  That form's one-sided steps are its body's `project`ions, and a projected
+  `Call` would name the *fused* procedure with one side's arguments.
+  Giving it a meaning needs a unary contract per side, which a `biproc` does not
+  have and cannot be given: a relational `ensures` says nothing about one
+  program alone. WhyRel has the unary specs because its bimethods live in a
+  module that declares them; RelRL has no module structure, so the form is
+  refused with a located error rather than mis-lowered. The lockstep `While`,
+  `WhileL` and `WhileR` do not project their bodies and take it fine.
+
 ## Specs
 
-- **Specs are scoped to the parameters and become Core's own contract.** A spec
-  names what the caller can see, never a bi-local. That is what lets `requires`/
-  `ensures` be Core `preconditions`/`postconditions` rather than an assume and
-  an assert in the body — and only a real postcondition gives `old x` its
-  meaning. A claim about a bi-local is an `Assert { R }` in the body instead,
-  which is strictly more expressive: it is checked where it stands.
-  `Program.lean`.
 
 - **A biproc's parameters are a Core `Bindings` per side.** `out`, `inout` and
   `translateProcBindings` then come from Core unchanged. The cost is the
@@ -124,7 +107,7 @@
 - **The sides are flattened, not nested.** An `ensures` naming both sides is
   impossible while they sit in `left:`/`right:` blocks, since a Core block's
   locals are invisible once it closes. Priming makes the two disjoint, so
-  emitting both into one list is the standard forall-forall encoding — sound
+  emitting both into one block is the standard forall-forall encoding — sound
   precisely because after priming neither side can observe the other. That
   soundness needs the rename to be *total* over the fragment, which is why it is
   driven by what the fragment mentions rather than a list of expected names.

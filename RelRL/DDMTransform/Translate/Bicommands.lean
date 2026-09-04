@@ -47,6 +47,71 @@ def lower_decl_list (p : StrataDDM.Program) (bindings : TransBindings) (dl : Arg
     (.op { ann, name := q`Core.block, args := #[.seq ann .newline #[stmt]] })
 
 
+/-- The `biproc` a synchronized call names, if this file declares one. A unary
+`procedure` is not one: it is called from inside a side, through Core's `call`.
+-/
+def find_biproc (p : StrataDDM.Program) (name : String) : Option StrataDDM.Operation :=
+  p.commands.find? fun op =>
+    op.name == q`RelRL.biproc &&
+      (match (op.args[0]? : Option Arg) with
+       | some (.ident _ n) => n == name
+       | _ => false)
+
+/-- One side of a synchronized call, lowered by putting it back in the
+`Core.call_statement` Core's grammar wraps it in — so `out`/`inout` arguments go
+through Core's own translator rather than a second copy of it here. -/
+def lower_call_side (p : StrataDDM.Program) (bindings : TransBindings)
+    (name : Arg) (args : Arg) : TransM Core.Statement := do
+  let ann := args.ann
+  let stmt : Arg := .op { ann, name := q`Core.call_statement,
+                          args := #[.option ann none, name, args] }
+  match ← translateStmt p bindings stmt with
+  | ([st], _) => return st
+  | _ => TransM.error "a call statement did not lower to exactly one Core statement"
+
+/-- The callee's parameter counts, per side: value arguments, then results. An
+`inout` counts as both, exactly as it does at the call site. -/
+def biproc_arity (bindings : TransBindings) (params : Arg) :
+    TransM ((Nat × Nat) × (Nat × Nat)) := do
+  match params with
+  | .option _ none => return ((0, 0), (0, 0))
+  | .option _ (some (.op op)) =>
+    match op.args with
+    | #[l, r] =>
+      let (li, lo, b) ← translateProcBindings bindings l
+      let (ri, ro, _) ← translateProcBindings b r
+      return ((li.length, lo.length), (ri.length, ro.length))
+    | _ => TransM.error "biproc parameters are not a left/right pair"
+  | _ => TransM.error "biproc parameters are not an option"
+
+/-- How many arguments and results a lowered call passes. -/
+def call_counts : Core.Statement → Nat × Nat
+  | .call _ args _ =>
+    ((Core.CallArg.getInputExprs args).length, (Core.CallArg.getLhs args).length)
+  | _ => (0, 0)
+
+/-- Check one side's argument list against the callee's parameters. Core checks
+this too, but only after the two sides have been fused into one argument list,
+so its message names neither the side nor a source position. -/
+def check_call_arity (callee : String) (side : Side) (fr : FileRange)
+    (want got : Nat × Nat) : Array Message :=
+  if want == got then #[] else
+    #[Message.withRange fr
+        s!"`{callee}`'s {side.name} side takes {want.1} argument(s) and {want.2} \
+           result(s); this call passes {got.1} and {got.2}" .userError]
+
+/-- Where a synchronized `biproc` call sits inside a bicommand tree, if one
+does. `bi_while` lowers its body through `.project` to get the steps only one
+side takes, and a `biproc` has no unary contract for those steps to call —
+`docs/status.md` says what to write instead. -/
+partial def bi_call_inside? (a : Arg) : Option StrataDDM.SourceRange :=
+  match a with
+  | .op op =>
+    if op.name == q`RelRL.bi_call then some op.ann else op.args.findSome? bi_call_inside?
+  | .seq _ _ as => as.findSome? bi_call_inside?
+  | .option _ (some b) => bi_call_inside? b
+  | _ => none
+
 /-- Lower one bicommand, extending the accumulator. Each branch's binding
 threading mirrors that form's `@[scope(…)]` in `Grammar.lean`. Under `project`,
 one side is kept verbatim and nothing is primed or checked for collisions —
@@ -139,6 +204,39 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
         let s := (s.check_side (src c) .left stmts).check_side (src c) .right stmts
         return s.emit stmts (prime_stmts (fragment_names stmts) stmts)
       | .project _ => return s.emit stmts []
+    | q`RelRL.bi_call, #[fa, la, ra] =>
+      let .ident _ callee := fa
+        | TransM.error "synchronized call does not name a procedure"
+      match find_biproc p callee with
+      | none =>
+        let d := Message.withRange (src arg)
+          s!"`{callee}` is not a `biproc` declared in this file. A unary \
+             `procedure` is called from inside a side — `|- call {callee}(…); -| ;` \
+             — and relates the two programs through its own spec." .userError
+        return { s with diagnostics := s.diagnostics.push d }
+      | some callee_op =>
+        let lstmt ← lower_call_side p s.bindings fa la
+        let rstmt ← lower_call_side p s.bindings fa ra
+        let (lwant, rwant) ← match callee_op.args[1]? with
+          | some params => biproc_arity s.bindings params
+          | none => TransM.error "biproc does not have exactly five arguments"
+        let s := { s with diagnostics := s.diagnostics
+                     ++ check_call_arity callee .left (src la) lwant (call_counts lstmt)
+                     ++ check_call_arity callee .right (src ra) rwant (call_counts rstmt) }
+        match mode with
+        | .project .left => return s.emit [lstmt] []
+        | .project .right => return s.emit [rstmt] []
+        | .verify =>
+          let s := (s.check_side (src la) .left [lstmt]).check_side (src ra) .right [rstmt]
+          -- *One* Core call, not two: the callee's `biproc` became a single
+          -- procedure whose inputs are the left side's then the right's, and
+          -- whose outputs are likewise — which is the order the two argument
+          -- lists concatenate in. So it is the relational contract that is
+          -- assumed here, which is the whole point of the form.
+          match lstmt, prime_stmts (fragment_names [rstmt]) [rstmt] with
+          | .call _ largs _, [.call _ rargs _] =>
+            return { s with out := s.out.push (.call callee (largs ++ rargs) md) }
+          | _, _ => TransM.error "a synchronized call did not lower to a Core call"
     | q`RelRL.bi_embed, #[l, r] =>
       match mode with
       | .verify =>
@@ -238,6 +336,19 @@ partial def lower_bicommand (mode : Mode) (p : StrataDDM.Program)
       let rge ← translateExpr p s.bindings rg
       match mode with
       | .verify =>
+        -- The one-sided steps below are this body's projections, and a `biproc`
+        -- has no unary contract for one of them to call.
+        let s := match bi_call_inside? body with
+          | none => s
+          | some range =>
+            let fr : FileRange := { file := .file ictx.fileName, range := range }
+            let d := Message.withRange fr
+              "a synchronized `biproc` call cannot appear inside a `While` with \
+               alignment guards: the steps only one side takes are this body's \
+               projections, and a `biproc` is only ever called by both programs at \
+               once. Use the lockstep `While` form, or move the call out of the \
+               loop." .userError
+            { s with diagnostics := s.diagnostics.push d }
         let rge := prime_expr (expr_names rge) rge
         let lae ← lower_rformula p s.bindings la
         let rae ← lower_rformula p s.bindings ra
