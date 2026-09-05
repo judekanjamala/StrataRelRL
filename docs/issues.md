@@ -8,41 +8,34 @@
 
 ## CLI help and error messages name `strata`, not `relrl`
 
-`relrl --help`, `relrl <cmd> --help`, and any error path that falls back to the
-framework's *default* hint print `strata` as the program name. Where
-`RelRL/Cli/Project.lean` passes an explicit hint — its two `--side` errors —
-the name is right, which is the shape of the fix:
-
 ```console
 $ relrl --help
 Usage: strata <command> [flags]...
-
-Command-line utilities for working with Strata.
-...
 $ relrl bogus
 Exception: Expected subcommand, got bogus.
 
 Run strata --help for additional help.
 ```
 
-Hardcoded in `Strata.Cli.Framework` in four places: `printGlobalHelp` (usage
-line and tagline), `printCommandHelp` (usage line), and the default hints of
+Hardcoded in `Strata.Cli.Framework` in four places: `printGlobalHelp` (usage line
+and tagline), `printCommandHelp` (usage line), and the default hints of
 `exitFailure` and `exitCmdFailure`. The framework takes no program-name
-parameter. Cosmetic only — dispatch, flags and exit codes are correct.
+parameter. Cosmetic only — dispatch, flags and exit codes are correct. Where
+`RelRL/Cli/Project.lean` passes an explicit hint the name is right, which is the
+shape of the fix.
 
-The right fix is upstream: thread a `progName` through the help printers and
-exit helpers, since every non-`strata` binary on this framework has the bug. A
-local override in `Main.lean` works but is partial — `printIndented` and
-`printFlag` are `private` and would need duplicating, and the two
-`exitCmdFailure` paths inside `parseArgs` stay wrong unless `parseArgs` is
-forked, risking drift from upstream's flag semantics.
+The right fix is upstream: thread a `progName` through the help printers and exit
+helpers, since every non-`strata` binary on this framework has the bug. A local
+override in `Main.lean` is partial — `printIndented` and `printFlag` are
+`private`, and the two `exitCmdFailure` paths inside `parseArgs` stay wrong
+unless `parseArgs` is forked, risking drift from upstream's flag semantics.
 
 ## A top-level declaration is shared by both programs
 
 **Unsound against WhyRel's semantics.** WhyRel gives each side its own state, so
 a global is two variables and the two programs may differ in it. Here a `const`
-is one symbol that both sides read, which makes agreement on anything derived
-from it free:
+is one symbol both sides read, which makes agreement on anything derived from it
+free:
 
 ```console
 $ cat glob.relrl.st
@@ -57,32 +50,28 @@ $ relrl verify glob.relrl.st
 All 1 goals passed.
 ```
 
-`Agree r` should not be provable: nothing relates the two programs' `g`. Each
-should get its own copy, `g` and `g'`, as every bi-local does.
+`Agree r` should not be provable: nothing relates the two programs' `g`.
 
-The cause is that a Core constant is a 0-ary *function*, so a reference to it
-lowers to `.op "g"` and never to `.fvar "g"`. Every priming helper is built on
-`substFvar`, and every traversal in `Strata/DL/Lambda` passes `.op` through
-unchanged — there is no substitution over operator names anywhere in Lambda or
-Core (`NameMangling` is about monomorphization). Globals are therefore invisible
-to priming, and equally invisible to `fragment_names`, so `check_side` does not
-see them either.
+The cause is that a Core constant is a 0-ary *function*, so a reference lowers to
+`.op "g"` and never `.fvar "g"`. Every priming helper is built on `substFvar`,
+and every traversal in `Strata/DL/Lambda` passes `.op` through unchanged — there
+is no substitution over operator names anywhere in Lambda or Core. Globals are
+therefore invisible to priming, and to `fragment_names`, so `check_side` misses
+them too.
 
 Fixing it has two halves. **Duplicate the declarations**: a `const` or function
-gets a primed copy, an `axiom` and a `distinct` get one with their references
-primed — otherwise `g'` is unconstrained while `g` is not — and a `procedure`
-gets one, since in WhyRel each side has its own. A `type` or `datatype` does not:
-a type is not program state.
+gets a primed copy; an `axiom` and a `distinct` get one with their references
+primed, or `g'` is unconstrained while `g` is not; a `procedure` gets one, since
+in WhyRel each side has its own. A `type` or `datatype` does not — a type is not
+program state.
 
-**Then rename references on the right**, for which there are two routes:
+**Then rename references on the right**, by one of two routes:
 
 - write an op-renaming traversal over `LExpr` and `Statement` — about thirty
   lines, and the first traversal of Core's AST this translator would own; or
-- lower right-hand fragments against a *primed binding set*, a copy of the
-  top-level `TransBindings` with each declaration's name primed, so
-  `translateExpr` emits `.op "g'"` directly. That needs `bi_sync` to lower its
-  one statement twice, once per binding set, rather than once with a lexical
-  rename after.
+- lower right-hand fragments against a *primed binding set*, so `translateExpr`
+  emits `.op "g'"` directly. That needs `bi_sync` to lower its one statement
+  twice, once per binding set, rather than once with a lexical rename after.
 
 The first is contained and leaves the lexical-priming design intact; the second
 avoids a new traversal but reworks how priming is applied.
@@ -91,7 +80,7 @@ avoids a new traversal but reworks how priming is applied.
 
 Two Core blocks at the same level declaring the same name make Core's verifier
 return **no obligations at all** for the enclosing procedure, silently and with
-exit 0. This is Core's, not RelRL's — here is a repro with no bicommands in it:
+exit 0. This is Core's, not RelRL's — the repro has no bicommands in it:
 
 ```console
 $ cat sib.relrl.st
@@ -106,30 +95,24 @@ $ relrl verify sib.relrl.st
 All 0 goals passed.                      # exit 0
 ```
 
-Rename the second `y` to `z` and the `ensures` comes back as a checked
-obligation that passes. Nothing is printed on stdout or stderr in the colliding
-case: the clause is not reported as failing, unknown, or skipped — it is simply
-absent, so a passing run means nothing. That is the worst available failure
-mode, and it is reachable from a hand-written Core file.
+Rename the second `y` and the `ensures` comes back as a checked obligation that
+passes. Nothing is printed either way: the clause is not reported as failing,
+unknown, or skipped — it is simply absent, so a passing run means nothing.
 
-Two things narrow it. `--verbose` shows `Type checking succeeded.` and then an
-empty `VCs:` list, so the program is accepted and it is VC *generation* that
-emits nothing — not the typechecker rejecting the second declaration. And the
-loss is per procedure: add a second, clean procedure to the file and it still
-verifies, so the summary reads `All 1 goals passed.` while `m` is checked for
-nothing at all. A healthy-looking run is therefore not evidence that every
-procedure in the file was checked.
+Two things narrow it. `--verbose` shows `Type checking succeeded.` and an empty
+`VCs:` list, so the program is accepted and it is VC *generation* that emits
+nothing. And the loss is per procedure: a second, clean procedure still verifies,
+so the summary reads `All 1 goals passed.` while `m` is checked for nothing.
 
-Past that the cause is upstream and untraced: the two blocks are well-scoped in
-the source, so something between block flattening and VC generation drops the
-procedure's obligations rather than renaming the shadowed declaration or
-rejecting it. Worth reporting with the repro above.
+Past that the cause is upstream and untraced: the blocks are well-scoped in the
+source, so something between block flattening and VC generation drops the
+obligations rather than renaming or rejecting the shadowed declaration. Worth
+reporting with the repro above.
 
-**Contained, on RelRL's side.** A bicommand emits its statements into one flat
-block, so `if`s from two different bicommands become siblings and a repeated
-name reaches this directly. `refuse_declarations` in
-`Translate/Bicommands.lean` refuses *any* Core declaration inside a `|- … -|`
-or a split's side, nested ones included, which removes RelRL's route to it:
+**Contained, on RelRL's side.** A bicommand emits into one flat block, so `if`s
+from two bicommands become siblings and a repeated name reaches this directly.
+`refuse_declarations` in `Translate/Bicommands.lean` refuses *any* Core
+declaration inside a `|- … -|` or a split's side, nested ones included:
 
 ```console
 $ relrl verify sides.relrl.st
@@ -138,12 +121,11 @@ the only form that declares. Write `Var y : … | … ;` before the bicommand.
 Finished with 0 goals checked, but 1 error(s) occurred.   # exit 1
 ```
 
-That refusal is not only containment — `Var` being the only binder is WhyRel's
-own rule, whose `|_ … _|` takes an `atomic_command` and whose only binder is
-`Var … in CC`. But it is what keeps the defect unreachable, so widen it, never
-loosen it, until the upstream fix lands. A `Var` cannot reach the defect: its
-declarations are top-level in the composed block, where a repeat is already
-reported as a collision against its own source range.
+That refusal is WhyRel's own rule as well as containment — its `|_ … _|` takes an
+`atomic_command`, and `Var … in CC` is its only binder. But it is what keeps the
+defect unreachable, so widen it, never loosen it, until the upstream fix lands. A
+`Var` cannot reach the defect: its declarations are top-level in the composed
+block, where a repeat is already reported against its own source range.
 
 ## A `datatype` breaks the top-level binding list a `biproc` body resolves against
 
@@ -155,7 +137,7 @@ let top : TransBindings := { freeVars := coreDecls.toArray }
 ```
 
 That assumes one `freeVars` entry per returned decl. `translateCoreDecls` pushes
-exactly one decl per *command*, but two of its branches grow `freeVars` by more:
+one decl per *command*, but two branches grow `freeVars` by more:
 
 | Command | decls returned | `freeVars` entries added |
 |---|---|---|
@@ -163,13 +145,12 @@ exactly one decl per *command*, but two of its branches grow `freeVars` by more:
 | `command_recfndefs` | 1 | one per function in the block |
 
 Every other branch is 1:1. A `.fvar i` in a `biproc` body indexes DDM's global
-context, so from the first such command onward `top.freeVars` is shorter than
-the index space and every later index is off. An index that lands out of range
-yields the default `Core.Decl`, which lowers to the literal `0` — a reference to
-a top-level constant becomes `0`, and a false spec can verify. Core's
-`translateExpr` asserts `i < bindings.freeVars.size`, so such a run also prints
-a `PANIC` per misresolved reference to **stderr**, where RelRL's CLI does not
-collect it.
+context, so from the first such command onward `top.freeVars` is short and every
+later index is off. An out-of-range index yields the default `Core.Decl`, which
+lowers to the literal `0` — a reference to a top-level constant becomes `0`, and
+a false spec can verify. Core's `translateExpr` also asserts `i <
+bindings.freeVars.size`, so such a run prints a `PANIC` per misresolved
+reference to **stderr**, where RelRL's CLI does not collect it.
 
 **Contained.** `misaligning_command?` names the two offending commands, and
 `translate_program_with` refuses the file rather than lowering a body against a
@@ -183,31 +164,28 @@ silently resolve to the wrong one. docs/issues.md has the mechanism.
 Finished with 0 goals checked, but 1 error(s) occurred.   # exit 1
 ```
 
-No body is lowered once it fires, so Core's `assert!` is never reached and the
-message stands alone. The guard is exact, not conservative: a `datatype` in a
-file with no `biproc` still works — that path goes through `translateCoreDecls`
-directly and never touches the reconstructed list — as do a type synonym, an
-opaque `type`, and a *single*-function `rec` block, all of which are 1:1.
+No body is lowered once it fires, so Core's `assert!` is never reached. The guard
+is exact, not conservative: a `datatype` in a file with no `biproc` still works —
+that path goes through `translateCoreDecls` directly — as do a type synonym, an
+opaque `type`, and a *single*-function `rec` block, all 1:1.
 
 The fix is upstream: have `translateCoreDecls` return its final `TransBindings`
 alongside the decls — it holds them at the end already — and have
-`translate_program_with` use that as `top`. That is correct for every command,
-present and future, and lets the guard be deleted. The dependency is unpinned
+`translate_program_with` use that as `top`. Correct for every command, present
+and future, and the guard can then be deleted. The dependency is unpinned
 (`rev = "main"`), so it is a patch upstream rather than a fork.
 
 Do not fix it by reimplementing `translateCoreDecls`'s dispatch inside RelRL:
 that duplicates a thirteen-case match against an unpinned dependency, which is
 the drift CLAUDE.md warns about.
 
-Nor by lowering a `biproc` into a Core `command_procedure` at the DDM level, so
-that nothing needs a reconstructed `top` at all. That is feasible but is a
-rewrite of the translator, not a fix. A `|- c -|` holds *one* fragment the two
-programs both run, so it must become two at different binder positions —
-duplication with re-indexing, against a scope-chain model RelRL would have to
-maintain by hand, with no `ExprF` index traversal upstream (`incIndices` and
-`instTypeM` are `TypeExprF`-only) and with references split between de Bruijn
-reads and lexical `lhsIdent` targets that must agree. It also trades ~1100 lines
-of typed `Core.Statement` construction for untyped `ArgF` arrays, where a shape
-error is a runtime failure rather than a type error. All to delete this guard
-and one line — against the two-line upstream change above. `docs/design.md`,
-"A `biproc` is lowered to Core terms".
+Nor by lowering a `biproc` into a Core `command_procedure` at the DDM level. That
+is feasible but a rewrite of the translator, not a fix: a `|- c -|` holds *one*
+fragment both programs run, so it must become two at different binder positions —
+duplication with re-indexing, against a scope chain RelRL would maintain by hand,
+with no `ExprF` index traversal upstream (`incIndices` is `TypeExprF`-only) and
+references split between de Bruijn reads and lexical `lhsIdent` targets that must
+agree. It also trades ~1100 lines of typed `Core.Statement` construction for
+untyped `ArgF` arrays, where a shape error is a runtime failure. All to delete
+this guard and one line, against the two-line upstream change above.
+[`design.md`](design.md), "A `biproc` is lowered to Core terms".

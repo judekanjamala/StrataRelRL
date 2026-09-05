@@ -3,14 +3,12 @@
 > **Scope.** What the project is, how to run it, and where everything is
 > documented. Details live in `docs/` — see the table below.
 
-An experimental [Strata](https://github.com/strata-org/Strata) dialect that
-adds **bicommands** — paired left/right program fragments — on top of Strata
-Core, and verifies them by lowering to Core and reusing Core's existing
-SMT-backed verification pipeline unchanged. It ports
-from **WhyRel** — the original OCaml implementation which lives at
-[dnaumann/RelRL](https://github.com/dnaumann/RelRL) based on Why3 onto Strata,
-starting with the forall-forall (2-safety) fragment described in
-[Nagasamudram et al., TACAS 2023](https://link.springer.com/chapter/10.1007/978-3-031-30820-8_11);
+An experimental [Strata](https://github.com/strata-org/Strata) dialect that adds
+**bicommands** — paired left/right program fragments — on top of Strata Core, and
+verifies them by lowering to Core and reusing Core's SMT-backed pipeline
+unchanged. It ports **WhyRel** ([dnaumann/RelRL](https://github.com/dnaumann/RelRL),
+OCaml on Why3) onto Strata, starting with the forall-forall (2-safety) fragment
+of [Nagasamudram et al., TACAS 2023](https://link.springer.com/chapter/10.1007/978-3-031-30820-8_11);
 the underlying relational region logic is from
 [Banerjee et al.](https://dl.acm.org/doi/10.1145/3551497).
 
@@ -18,46 +16,37 @@ the underlying relational region logic is from
 
 Requires an SMT solver on `PATH` (cvc5 by default).
 
-`Main.lean` + `RelRL/Cli/` define a self-contained `lean_exe` built on the
-shared `Strata.Cli.Framework` from the `Strata` dependency, so no
-`Strata-CLI` checkout is involved. One module per command, matching
-`docs/workflows.md`.
+`Main.lean` + `RelRL/Cli/` define a self-contained `lean_exe` on the shared
+`Strata.Cli.Framework`, so no `Strata-CLI` checkout is involved. One module per
+command, matching [`docs/workflows.md`](docs/workflows.md).
 
 ```console
-$ lake exe relrl verify RelRL/Examples/Assertions.relrl.st
-Assertions.relrl.st(49, 2) [assert_1_1]: ✅ pass
-Assertions.relrl.st(49, 2) [assert_1_2]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_1]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_2]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_3]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_4]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_5]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_6]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_7]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_8]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_9]: ✅ pass
-Assertions.relrl.st(21, 2) [ensures_10]: ✅ pass
-All 12 goals passed.
+$ lake exe relrl verify RelRL/Examples/WhyRel/Factorial.relrl.st
+Factorial.relrl.st(16, 2) [insertLoopInvAssert_entry_invariant_loop_0_0_while_1_align]: ✅ pass
+…
+Factorial.relrl.st(10, 2) [ensures_1]: ✅ pass
+Factorial.relrl.st(11, 2) [ensures_3]: ✅ pass
+All 15 goals passed.
 ```
-`verify` accepts the same `--check-mode`/`--solver`/`--vc-directory`/etc. flags
-as the generic `strata verify` command (`Strata.Cli.VerifyOptions`), and uses
-the same exit-code scheme (0 = success, 2 = failures found, 3 = internal error).
-A translation diagnostic also exits 3: the Core program verified would not be
-the program written, so a clean obligation count must not read as success.
 
-`relrl toCore <file>` prints the translated Core program instead, so it can
-be verified with any generic Core tool. 
+`verify` takes the same `--check-mode`/`--solver`/`--vc-directory`/… flags as the
+generic `strata verify` (`Strata.Cli.VerifyOptions`) and the same exit codes
+(0 = success, 2 = failures, 3 = internal error). A translation diagnostic also
+exits 3: the Core program verified would not be the program written, so a clean
+obligation count must not read as success.
+
+`relrl toCore <file>` prints the translated Core program instead, so it can be
+verified with any generic Core tool.
 
 `relrl project <file> --side left|right` prints the Core program for *one* side
-of every `biproc` — the unary program that side denotes on its own, with neither
-the other side nor the relational `ensures` (which names both sides, so it means
-nothing about one). Nothing shares its scope, so the right side keeps its source
-names rather than being primed. Useful for reading what each side actually says,
-and for checking a side's own unary specs with a generic Core tool.
+of every `biproc` — the unary program that side denotes alone, without the other
+side or the relational `ensures` (which names both, so it means nothing about
+one). Nothing shares its scope, so the right side keeps its source names. Useful
+for reading what each side says, and for checking its own unary specs.
 
-`relrl --help` lists all three commands and their flags (`--check-mode`, `--solver`,
-`--vc-directory`, …, shared with `strata verify`). (currently the help and error
-text names `strata` rather than `relrl`. Fix is upstream)
+`relrl --help` lists all three commands and their flags. The help and error text
+currently names `strata` rather than `relrl`; the fix is upstream —
+[`docs/issues.md`](docs/issues.md).
 
 ## Layout
 
@@ -74,7 +63,7 @@ text names `strata` rather than `relrl`. Fix is upstream)
 | `RelRL/Cli/Project.lean` | the `project` command |
 | `RelRL/Cli.lean` | imports the four, so `Main.lean` sees one module |
 | `Main.lean` | standalone `relrl` executable |
-| `RelRL/Examples` | Dialect examples, one per feature |
+| `RelRL/Examples` | dialect examples, one per feature; `README.md` is the regression baseline |
 | `RelRL/Examples/WhyRel` | WhyRel's `examples/all_all` case studies, ported |
 
 Each doc opens with a **Scope** note saying what belongs in it and where
