@@ -30,6 +30,19 @@ def bool_app (op : Core.Expression.Expr) (args : List Core.Expression.Expr) :
     Core.Expression.Expr :=
   Lambda.LExpr.mkApp () op args
 
+/-- The Core operator a `Rel` names. The four come from Core's own
+`BinaryCmpBaseInt`, so the surface language invents no operator spelling. -/
+def bicmp_op (arg : Arg) : TransM Core.Expression.Expr := do
+  match arg with
+  | .op op =>
+    match op.name with
+    | q`Core.int_lt => return Core.intLtOp
+    | q`Core.int_le => return Core.intLeOp
+    | q`Core.int_gt => return Core.intGtOp
+    | q`Core.int_ge => return Core.intGeOp
+    | n => TransM.error s!"`Rel` does not take {n.fullName}"
+  | _ => TransM.error "`Rel`'s comparison is not an operation"
+
 /-- Lower a relational formula to one Core `bool` expression. `Grammar.lean`
 lists what each form means; here, "the right state" is just the primed reading —
 a right-hand fragment has every variable it mentions renamed. -/
@@ -47,6 +60,11 @@ partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
       let l ← translateExpr p bindings l
       let r ← translateExpr p bindings r
       return .eq () l (prime_expr (expr_names r) r)
+    | q`RelRL.rf_bicmp, #[f, l, r] =>
+      let op ← bicmp_op f
+      let l ← translateExpr p bindings l
+      let r ← translateExpr p bindings r
+      return bool_app op [l, prime_expr (expr_names r) r]
     | q`RelRL.rf_group, #[r] =>
       lower_rformula p bindings r
     | q`RelRL.rf_not, #[r] =>

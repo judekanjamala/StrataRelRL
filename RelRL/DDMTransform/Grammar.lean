@@ -47,6 +47,12 @@ op rf_or (l : RFormula, r : RFormula) : RFormula => @[prec(8), leftassoc] l " \\
 op rf_implies (l : RFormula, r : RFormula) : RFormula => @[prec(5), rightassoc] l " => " r;
 op rf_iff (l : RFormula, r : RFormula) : RFormula => @[prec(4)] l " <=> " r;
 
+// WhyRel's `[< e <] > [> e >]`: a comparison whose two operands are values of
+// the two programs. Position picks the side, as in `=:=`; the leading `Rel`
+// keeps an operand's own `int.gt(…)` from starting one — docs/design.md.
+op rf_bicmp (f : BinaryCmpBaseInt, l : int, r : int) : RFormula =>
+  "Rel " f " (" l " | " r ")";
+
 // ---- Bicommands -------------------------------------------------------
 // Bicommand is deliberately NOT a `Command` — docs/design.md.
 

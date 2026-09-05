@@ -15,7 +15,7 @@ known defects, each traced to its root cause.
 
 ```console
 lake build relrl
-lake exe relrl verify RelRL/Examples/Assertions.relrl.st  # smoke test: expect 13/13 passed
+lake exe relrl verify RelRL/Examples/Assertions.relrl.st  # smoke test: expect 15/15 passed
 lake exe relrl verify RelRL/Examples/SeqBi.relrl.st       # expect 5/5 passed
 lake exe relrl verify RelRL/Examples/Swap.relrl.st        # expect 6/6 passed
 lake exe relrl verify RelRL/Examples/BiVar.relrl.st       # expect 4/4 passed
@@ -33,6 +33,8 @@ map *equality*, so they need `--use-array-theory` — see below.
 ```console
 lake exe relrl verify RelRL/Examples/WhyRel/Factorial.relrl.st    # expect 15/15 passed
 lake exe relrl verify RelRL/Examples/WhyRel/EquivCheck.relrl.st   # expect 18/18 passed
+lake exe relrl verify RelRL/Examples/WhyRel/MonoFact.relrl.st     # expect 11/11 passed
+lake exe relrl verify RelRL/Examples/WhyRel/Majorization.relrl.st # expect 10/10 passed
 lake exe relrl verify RelRL/Examples/WhyRel/FizzBuzzSum.relrl.st  # expect 23/23 passed
 lake exe relrl verify --use-array-theory RelRL/Examples/WhyRel/FizzBuzz.relrl.st  # expect 21/21
 lake exe relrl verify --use-array-theory RelRL/Examples/WhyRel/SimpleIO.relrl.st  # expect 29/29

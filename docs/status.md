@@ -46,13 +46,20 @@
   bicommand read three ways.
 - A standalone `relrl` CLI (`verify`, `toCore`, `project`) with no `Strata-CLI`
   dependency
-- **WhyRel's heap-free `all_all` case studies**, under
-  `RelRL/Examples/WhyRel/`: `factorial`, `equiv-check`, and both halves of
-  `Veracity/Fizzbuzz`, plus `Veracity/Simple_IO`. Two of the seven do not port:
-  `monofact` and `majorization` both state a cross-side *inequality*, which the
-  formula language cannot write — see "Not implemented" below. Where WhyRel
-  keeps mutable state in a module global, the port passes it `inout` instead,
-  which is also what gives each side its own copy.
+- **Every heap-free `all_all` case study of WhyRel's**, under
+  `RelRL/Examples/WhyRel/`: `factorial`, `equiv-check`, `monofact`,
+  `majorization`, `Veracity/Simple_IO`, and both halves of
+  `Veracity/Fizzbuzz`. Where WhyRel keeps mutable state in a module global, the
+  port passes it `inout` instead, which is also what gives each side its own
+  copy.
+
+- **A cross-side comparison**, WhyRel's `[< e <] > [> e >]`: `Rel int.gt (l | r)`
+  holds when the left program's `l` exceeds the right program's `r`. The
+  operator is one of Core's own `int.lt`/`int.le`/`int.gt`/`int.ge`, so the
+  surface language invents no spelling for it, and position picks the side
+  exactly as it does in `l =:= r`. `monofact` and `majorization` are what need
+  it.
+
 
 ## Differences from WhyRel
 
@@ -70,6 +77,7 @@ under `examples/all_all/`.
 | `While e\|e' . do … done` | `While e\|e' do … done` | Lockstep is its own op rather than an empty alignment guard; DDM has no optional-with-separator form |
 | `meth m (n:int\|n:int) : (int\|int)` | `biproc m (n : int, out result : int) \| (n : int, out result : int)` | Each side is a Core `Bindings`, so `out`/`inout` and `translateProcBindings` are reused; the return is a named `out` rather than an implicit `result`, which a translator cannot bind into DDM's elaborator |
 | `\|_ m() _\|` | `\|- Call m (a, out r) \| (b, out s) -\| ;` | The arguments come per side, as the declaration's do; `Call` rather than Core's `call` because after `\|- ` a Core call statement is already a live alternative — `docs/design.md` |
+| `[< e <] > [> e' >]` | `Rel int.gt (e \| e')` | Position picks the side, as in `=:=`, so no value-embedding brackets are needed; the operator is Core's own. Only Core's four int comparisons — `docs/design.md` |
 
 `result` is not a keyword: it is whatever the `out` binding is called. Naming it
 `result` on both sides recovers WhyRel's spelling, and `Agree result` then means
@@ -136,14 +144,13 @@ obligation".
 - **Formulas.** Quantifiers (`Rquant`), `let` (`Rlet`), named relational
   predicates and coupling relations (`Rprimitive`, `named_rformula`), and
   everything needing a heap: region-image agreement (``Agree e`f``), refperm.
-- **A cross-side relation other than equality.** WhyRel's `[< e <]` and
-  `[> e >]` embed one side's *value* into a formula, so any comparison can span
-  the two: `[< result <] > [> result >]`. RelRL's only cross-side atom is
-  `l =:= r`, and each operand is checked against the side that declared its
-  names, so an inequality between the two programs cannot be written at all.
-  This is what blocks `all_all/monofact` and `all_all/majorization` below; an
-  op alongside `rf_biequal` in `Grammar.lean`, translated the same way, is the
-  whole fix.
+- **Arithmetic across the two sides.** WhyRel's `[< e <]`/`[> e >]` embed a
+  value into a whole `biexp` grammar, so `[< i <] + [1] = [> i >]` is one
+  formula. `Rel` compares a left expression to a right one and stops there:
+  arithmetic goes inside a side's own operand (`Rel int.ge (int.add(i, 1) | i)`),
+  which is what every `all_all` use of the form needs. `Rel` also covers only
+  Core's four *int* comparisons; a `real` or `bv` one would be another entry in
+  `bicmp_op`.
 - **Program structure.** No `interface` / `module` / `bimodule`, no classes,
   objects or regions, no `effects` clauses. Parameters, returns, unary calls and
   synchronized `biproc` calls all exist, so a relational spec is already usable

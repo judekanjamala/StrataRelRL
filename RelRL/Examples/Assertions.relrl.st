@@ -62,4 +62,10 @@ biproc sum
     // expression.
     /\ { ~ Agree last => { Agree s \/ [> s == 0 |> } }
     /\ { Agree s <=> Both (s == 6) }
+    // `Rel f (l | r)` — any of Core's int comparisons between a left value and
+    // a right one. WhyRel writes it `[< e <] > [> e >]`; here, as in `=:=`,
+    // position picks the side.
+    /\ Rel int.gt (int.add(s, 1) | s)
+    /\ Rel int.le (last | int.add(last, 2))
   } ;
+

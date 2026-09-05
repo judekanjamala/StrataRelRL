@@ -86,6 +86,16 @@
   the message still says which program. `Formulas.lean` has no `Agree` case at
   all.
 
+- **`Rel f (l | r)` leads with a keyword because its operands are Core
+  expressions.** WhyRel marks the two sides at the leaves — `[< e <] > [> e >]`
+  — and needs a `biexp` grammar to combine them. RelRL already settled that a
+  cross-side atom picks the side by *position*, as `l =:= r` does, so the
+  markers would be a second convention for the same thing. What position alone
+  cannot do is start the form: `int.gt(…)` is also how a `=:=` operand begins,
+  so `int.gt(l, r)` at formula position is ambiguous with the left operand of
+  `int.gt(a, b) =:= int.gt(c, d)`. The keyword removes that, and `f` is Core's
+  own `BinaryCmpBaseInt`, so no operator spelling is invented. `Formulas.lean`.
+
 - The one-sided BiWhile steps are this translator's own `project` mode applied to the
   body, which is why that mode is more than a printing aid. `Bicommands.lean`.
 
