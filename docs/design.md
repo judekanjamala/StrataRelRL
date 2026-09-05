@@ -94,6 +94,16 @@
   stays as sugar for `Rel f ([< l <], [> r >])`, wrapped in `Desugar.lean`. Two
   spellings, one lowering.
 
+  What `BiExp` deliberately does *not* do is grow into a copy of Core's
+  expression grammar. "Any Core expression across the two programs" would mean
+  mirroring some sixty operator forms — every `bv` width, `Map`, `Sequence`,
+  `str`, `re` — and that is the reuse of `Core.getProgram` this design rests on,
+  spent. `Let` buys the same reach for three ops: name a value from either side,
+  and the body is an ordinary formula in which those names are Core *bound*
+  variables, so Core's own expression language combines them at any type with
+  nothing primed. `BiExp` stays what it is worth being — the terse `int`
+  comparison, which is nearly every use.
+
   The keyword is what makes the form findable: `int.gt(…)` is also how a `=:=`
   operand begins, so `int.gt(l, r)` at formula position is ambiguous with the
   left operand of `int.gt(a, b) =:= int.gt(c, d)`. And every operator slot takes

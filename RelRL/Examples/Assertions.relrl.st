@@ -75,6 +75,19 @@ biproc sum
     /\ Rel int.gt (int.add ([< last <], [> last >]), [< 3 <])
   } ;
 
+  // `Let` names a value from either program; the body is an ordinary formula
+  // over those names, so any Core expression, at any type, can combine the two.
+  // The names are bound variables, which is why nothing primes them.
+  Assert { Let x = [< s <], y = [> s >] :: <| x == y <] } ;
+  // A type `Rel` cannot reach: the comparison there is `int`, and this is not.
+  Assert { Let p = [< s == 6 <], q = [> s == 6 >] :: <| p && q <] } ;
+  // `last` is 3 on the left and 1 on the right, so a binding from each side
+  // combines into a value neither program holds.
+  Assert { Let a = [< last <], b = [> last >] :: <| int.add(a, b) == 4 <] } ;
+  // A binding may read what an earlier one declared, from the other side:
+  // `b` is the right program's `last` plus the left program's.
+  Assert { Let a = [< last <], b = [> int.add(last, a) >] :: <| b == 4 <] } ;
+
   // A quantifier binds one list per side, either side omittable, or one list
   // both readings share. Nothing bound here is program state, so nothing about
   // it is primed — which is why `Forall i : int | i : int` is refused.

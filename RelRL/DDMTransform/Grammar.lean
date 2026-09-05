@@ -66,6 +66,27 @@ op be_neg (f : UnaryArithInt, e : BiExp) : BiExp => f " (" e ")";
 op rf_bicmp_exp (f : BinaryCmpBaseInt, l : BiExp, r : BiExp) : RFormula =>
   "Rel " f " (" l ", " r ")";
 
+// WhyRel's `Rlet`: name a value from either program, then say what you like
+// about the names. The body is an ordinary relational formula, so *all* of
+// Core's expression language reaches across the two programs through it —
+// `BiExp` above stays the int shorthand rather than growing a copy of Core's
+// operator grammar. docs/design.md.
+category BiLetBind;
+@[declare(x, tp)]
+op bilet_left (tp : Type, x : Ident, e : tp) : BiLetBind => x " = [< " e " <]";
+@[declare(x, tp)]
+op bilet_right (tp : Type, x : Ident, e : tp) : BiLetBind => x " = [> " e " >]";
+
+category BiLetBinds;
+@[scope(b)]
+op biletAtom (b : BiLetBind) : BiLetBinds => b;
+@[scope(b)]
+op biletPush (bs : BiLetBinds, @[scope(bs)] b : BiLetBind) : BiLetBinds =>
+  bs:0 ", " b:0;
+
+op rf_let (bs : BiLetBinds, @[scope(bs)] b : RFormula) : RFormula =>
+  @[prec(3)] "Let " bs " :: " b;
+
 // The whole-value comparison, where position picks the side as it does in
 // `=:=`. Sugar: `Desugar.lean` wraps each operand and hands it to the form
 // above.
