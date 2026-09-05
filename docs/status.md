@@ -75,7 +75,7 @@ under `examples/all_all/`.
 `result` on both sides recovers WhyRel's spelling, and `Agree result` then means
 what it does there.
 
-`=:=`, `Agree x`, `<| … <]`, `[> … |>`, `~ /\ \/ => <=>`, `Assert { R }` and the
+`=:=`, `Agree e`, `<| … <]`, `[> … |>`, `~ /\ \/ => <=>`, `Assert { R }` and the
 placement of `requires`/`ensures` above the body all match WhyRel as written.
 
 ### The layer inside a bicommand is Core's
@@ -157,11 +157,11 @@ obligation".
 - **Priming is visible.** WhyRel goes to Why3 with genuinely two-state formulas;
   RelRL composes the two programs into one, so the right side really is a set
   of variables named `a'`, and *every* name a right-hand fragment mentions is
-  renamed — which is what keeps a one-sided variable from being shared. One
-  consequence reaches the surface language: `Agree x` takes an `Ident` rather
-  than an expression, since `x'` is a name lowering invents and DDM has nothing
-  to elaborate it against — `docs/design.md`. The translator checks that operand,
-  and every other name a side mentions, against what that side declared.
+  renamed — which is what keeps a one-sided variable from being shared. Nothing
+  of this reaches the surface language: the primed name is never written, so
+  `Agree e` is just `e =:= e` and both operands elaborate in the same scope —
+  `docs/design.md`. The translator checks the lowered formula, and every other
+  name a side mentions, against what that side declared.
 - **A top-level `/\` is split** into one obligation per conjunct, and a
   top-level `Both (e)` into one per program, for readable verifier output.
   RelRL's own, not WhyRel's.

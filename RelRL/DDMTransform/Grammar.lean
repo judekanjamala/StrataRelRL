@@ -34,7 +34,8 @@ import Core;
 // ---- Relational formulas ----------------------------------------------
 category RFormula;
 
-op rf_agree (x : Ident) : RFormula => "Agree " x;
+// Sugar for `x =:= x`; `Desugar.lean` rewrites it, so lowering has no case.
+op rf_agree (tp : Type, x : tp) : RFormula => "Agree " x;
 op rf_both (p : bool) : RFormula => "Both" " (" p ")";
 op rf_left (p : bool) : RFormula => "<| " p " <]";
 op rf_right (p : bool) : RFormula => "[> " p " |>";

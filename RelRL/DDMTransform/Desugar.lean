@@ -52,6 +52,11 @@ partial def desugar_arg (a : Arg) : Arg :=
     | q`RelRL.bi_if_then, #[lg, rg, thn] =>
       .op { ann := op.ann, name := q`RelRL.bi_if,
             args := #[lg, rg, thn, .seq op.ann .newline #[]] }
+    -- `Agree x` is `x =:= x` by definition: one expression, read in each
+    -- state. The operand is copied into two positions at the same depth,
+    -- neither of which binds.
+    | q`RelRL.rf_agree, #[tp, e] =>
+      .op { ann := op.ann, name := q`RelRL.rf_biequal, args := #[tp, e, e] }
     -- `Both (e)` is `<| e <] /\ [> e |>` by definition, and writing it that way
     -- puts it in reach of `top_conjuncts`: one obligation per side, so a failure
     -- names the program it happened in. The `bool` is duplicated into two

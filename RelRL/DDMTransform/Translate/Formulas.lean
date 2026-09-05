@@ -20,8 +20,8 @@ open StrataDDM (Arg)
 /-! # Relational formulas
 
 A formula becomes one Core `bool` expression. `Grammar.lean` lists what each
-form means; `docs/design.md` says why `Agree x` is the one that takes an
-`Ident`. -/
+form means. `Agree` and `Both` are absent: `Desugar.lean` rewrote both away
+before this ran. -/
 
 /-- Apply one of Core's boolean operators. A relational formula has no Core
 surface syntax to route through `translateFnTable`, so it builds the same
@@ -38,8 +38,6 @@ partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
   match arg with
   | .op op =>
     match op.name, op.args with
-    | q`RelRL.rf_agree, #[.ident _ x] =>
-      return .eq () (.fvar () ⟨x, ()⟩ none) (.fvar () ⟨x ++ "'", ()⟩ none)
     | q`RelRL.rf_left, #[e] =>
       translateExpr p bindings e
     | q`RelRL.rf_right, #[e] =>

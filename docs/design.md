@@ -71,11 +71,20 @@
   pipe-delimited identifier`, running to end of file, while `Var acc : int | ;`
   is fine.
 
-- **A formula's operands are Core expressions, elaborated by DDM.** So
-  `<| int.gt(n, 0) <]` and `l =:= r` work without RelRL owning an expression
-  grammar. `Agree x` is the exception and takes an `Ident`: it names the pair
-  `x`/`x'`, and `x'` exists only after lowering, so there is nothing for DDM to
-  resolve. `check_formula` checks that operand instead. `Formulas.lean`.
+- **Every formula operand is a Core expression, elaborated by DDM**, `Agree`'s
+  included. So `<| int.gt(n, 0) <]`, `l =:= r` and `Agree e` all work without
+  RelRL owning an expression grammar, and an operand naming nothing is DDM's
+  error, at its column, before lowering runs.
+
+  Nothing has to elaborate the primed name, because nothing writes one: `=:=`
+  elaborates its right operand in the *same* scope as its left, and priming
+  renames the result afterwards. That is what makes `Agree e` exactly `e =:= e`
+  and leaves the whole form as sugar, rewritten in `Desugar.lean` — one
+  expression copied into two positions at the same depth, which is the same
+  shape as the `Both (e)` rewrite beside it. `check_formula` then checks the
+  lowered expression, so a name only one program declares is still caught, and
+  the message still says which program. `Formulas.lean` has no `Agree` case at
+  all.
 
 - The one-sided BiWhile steps are this translator's own `project` mode applied to the
   body, which is why that mode is more than a printing aid. `Bicommands.lean`.

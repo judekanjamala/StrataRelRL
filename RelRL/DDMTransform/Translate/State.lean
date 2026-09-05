@@ -127,8 +127,8 @@ def BodyState.check_side (s : BodyState) (fr : FileRange) (side : Side)
 
 /-- The same for a lowered formula, which names both programs at once and so is
 checked against Core names — a left declaration under its source name, a right
-one under its prime. This is also what catches `Agree x` for an `x` neither
-program declares, since that form is built lexically. -/
+one under its prime. This is what catches a formula naming an `x` only one
+program declares: DDM resolved it against the scope chain, which holds both. -/
 def check_formula (declared : List DeclName) (fr : FileRange)
     (e : Core.Expression.Expr) : Array Message :=
   (expr_names e).foldl (init := #[]) fun ds n =>
