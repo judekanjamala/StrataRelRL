@@ -47,9 +47,28 @@ op rf_or (l : RFormula, r : RFormula) : RFormula => @[prec(8), leftassoc] l " \\
 op rf_implies (l : RFormula, r : RFormula) : RFormula => @[prec(5), rightassoc] l " => " r;
 op rf_iff (l : RFormula, r : RFormula) : RFormula => @[prec(4)] l " <=> " r;
 
-// WhyRel's `[< e <] > [> e >]`: a comparison whose two operands are values of
-// the two programs. Position picks the side, as in `=:=`; the leading `Rel`
-// keeps an operand's own `int.gt(…)` from starting one — docs/design.md.
+// WhyRel's `biexp`: arithmetic over values of *both* programs, so one term can
+// mix them — `int.add([< i <], [> j >])`. Position cannot pick the side once
+// arithmetic nests, which is what the `[< … <]`/`[> … >]` markers are for.
+// Operators are Core's own; a constant is `[< 1 <]`, a literal reading the same
+// in either state.
+category BiExp;
+op be_left (e : int) : BiExp => "[< " e " <]";
+op be_right (e : int) : BiExp => "[> " e " >]";
+op be_arith (f : BinaryArithBasicInt, l : BiExp, r : BiExp) : BiExp =>
+  f " (" l ", " r ")";
+op be_divmod (f : BinaryArithDivModInt, l : BiExp, r : BiExp) : BiExp =>
+  f " (" l ", " r ")";
+op be_neg (f : UnaryArithInt, e : BiExp) : BiExp => f " (" e ")";
+
+// WhyRel's `[< e <] > [> e' >]`. The leading `Rel` keeps an operand's own
+// `int.gt(…)` from starting one — docs/design.md.
+op rf_bicmp_exp (f : BinaryCmpBaseInt, l : BiExp, r : BiExp) : RFormula =>
+  "Rel " f " (" l ", " r ")";
+
+// The whole-value comparison, where position picks the side as it does in
+// `=:=`. Sugar: `Desugar.lean` wraps each operand and hands it to the form
+// above.
 op rf_bicmp (f : BinaryCmpBaseInt, l : int, r : int) : RFormula =>
   "Rel " f " (" l " | " r ")";
 

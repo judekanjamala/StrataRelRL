@@ -67,6 +67,12 @@ biproc sum
     // position picks the side.
     /\ Rel int.gt (int.add(s, 1) | s)
     /\ Rel int.le (last | int.add(last, 2))
+    // The same, spelled out: `[< e <]` reads the left state and `[> e >]` the
+    // right, and the short form above is sugar for exactly this.
+    /\ Rel int.gt ([< int.add(s, 1) <], [> s >])
+    // Which is what buys arithmetic *across* the two — a term position cannot
+    // reach into. WhyRel's `[< e <] + [1] > [> e >]`.
+    /\ Rel int.gt (int.add ([< last <], [> last >]), [< 3 <])
   } ;
 
   // A quantifier binds one list per side, either side omittable, or one list

@@ -23,16 +23,17 @@ A formula becomes one Core `bool` expression. `Grammar.lean` lists what each
 form means. `Agree` and `Both` are absent: `Desugar.lean` rewrote both away
 before this ran. -/
 
-/-- Apply one of Core's boolean operators. A relational formula has no Core
-surface syntax to route through `translateFnTable`, so it builds the same
-applications directly. -/
-def bool_app (op : Core.Expression.Expr) (args : List Core.Expression.Expr) :
+/-- Apply one of Core's operators. A relational formula has no Core surface
+syntax to route through `translateFnTable`, so it builds the same applications
+directly. -/
+def core_app (op : Core.Expression.Expr) (args : List Core.Expression.Expr) :
     Core.Expression.Expr :=
   Lambda.LExpr.mkApp () op args
 
-/-- The Core operator a `Rel` names. The four come from Core's own
-`BinaryCmpBaseInt`, so the surface language invents no operator spelling. -/
-def bicmp_op (arg : Arg) : TransM Core.Expression.Expr := do
+/-- The Core operator one of Core's own int-operator categories names. `Rel`
+and `BiExp` take those categories directly, so the surface language invents no
+operator spelling and gains one the moment Core does. -/
+def int_op (arg : Arg) : TransM Core.Expression.Expr := do
   match arg with
   | .op op =>
     match op.name with
@@ -40,8 +41,36 @@ def bicmp_op (arg : Arg) : TransM Core.Expression.Expr := do
     | q`Core.int_le => return Core.intLeOp
     | q`Core.int_gt => return Core.intGtOp
     | q`Core.int_ge => return Core.intGeOp
-    | n => TransM.error s!"`Rel` does not take {n.fullName}"
-  | _ => TransM.error "`Rel`'s comparison is not an operation"
+    | q`Core.int_add => return Core.intAddOp
+    | q`Core.int_sub => return Core.intSubOp
+    | q`Core.int_mul => return Core.intMulOp
+    | q`Core.int_div => return Core.intDivOp
+    | q`Core.int_mod => return Core.intModOp
+    | q`Core.int_neg => return Core.intNegOp
+    | n => TransM.error s!"no Core operator for {n.fullName}"
+  | _ => TransM.error "an operator slot is not an operation"
+
+/-- A bi-expression. `[< e <]` reads the left state and `[> e >]` the right,
+which is the primed reading as everywhere else; the arithmetic above them is
+what lets one term mix the two. -/
+partial def lower_biexp (p : StrataDDM.Program) (bindings : TransBindings)
+    (arg : Arg) : TransM Core.Expression.Expr := do
+  match arg with
+  | .op op =>
+    match op.name, op.args with
+    | q`RelRL.be_left, #[e] => translateExpr p bindings e
+    | q`RelRL.be_right, #[e] =>
+      let e ← translateExpr p bindings e
+      return prime_expr (expr_names e) e
+    | q`RelRL.be_arith, #[f, l, r]
+    | q`RelRL.be_divmod, #[f, l, r] =>
+      return core_app (← int_op f)
+        [← lower_biexp p bindings l, ← lower_biexp p bindings r]
+    | q`RelRL.be_neg, #[f, e] =>
+      return core_app (← int_op f) [← lower_biexp p bindings e]
+    | n, args =>
+      TransM.error s!"unexpected bi-expression {n.fullName} with {args.size} arguments"
+  | _ => TransM.error "bi-expression is not an operation"
 
 /-- A relational quantifier's binders, the left list first — the order
 `Grammar.lean`'s `@[scope]` chain puts them in, and so the Core binder order.
@@ -79,28 +108,26 @@ partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
       let l ← translateExpr p bindings l
       let r ← translateExpr p bindings r
       return .eq () l (prime_expr (expr_names r) r)
-    | q`RelRL.rf_bicmp, #[f, l, r] =>
-      let op ← bicmp_op f
-      let l ← translateExpr p bindings l
-      let r ← translateExpr p bindings r
-      return bool_app op [l, prime_expr (expr_names r) r]
+    | q`RelRL.rf_bicmp_exp, #[f, l, r] =>
+      return core_app (← int_op f)
+        [← lower_biexp p bindings l, ← lower_biexp p bindings r]
     | q`RelRL.rf_forall, #[xs, b] => lower_quant .all p bindings xs b
     | q`RelRL.rf_exists, #[xs, b] => lower_quant .exist p bindings xs b
     | q`RelRL.rf_group, #[r] =>
       lower_rformula p bindings r
     | q`RelRL.rf_not, #[r] =>
-      return bool_app Core.boolNotOp [← lower_rformula p bindings r]
+      return core_app Core.boolNotOp [← lower_rformula p bindings r]
     | q`RelRL.rf_and, #[l, r] =>
-      return bool_app Core.boolAndOp
+      return core_app Core.boolAndOp
         [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | q`RelRL.rf_or, #[l, r] =>
-      return bool_app Core.boolOrOp
+      return core_app Core.boolOrOp
         [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | q`RelRL.rf_implies, #[l, r] =>
-      return bool_app Core.boolImpliesOp
+      return core_app Core.boolImpliesOp
         [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | q`RelRL.rf_iff, #[l, r] =>
-      return bool_app Core.boolEquivOp
+      return core_app Core.boolEquivOp
         [← lower_rformula p bindings l, ← lower_rformula p bindings r]
     | n, args =>
       TransM.error s!"unexpected relational formula {n.fullName} with {args.size} arguments"

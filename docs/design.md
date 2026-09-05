@@ -86,15 +86,19 @@
   the message still says which program. `Formulas.lean` has no `Agree` case at
   all.
 
-- **`Rel f (l | r)` leads with a keyword because its operands are Core
-  expressions.** WhyRel marks the two sides at the leaves — `[< e <] > [> e >]`
-  — and needs a `biexp` grammar to combine them. RelRL already settled that a
-  cross-side atom picks the side by *position*, as `l =:= r` does, so the
-  markers would be a second convention for the same thing. What position alone
-  cannot do is start the form: `int.gt(…)` is also how a `=:=` operand begins,
-  so `int.gt(l, r)` at formula position is ambiguous with the left operand of
-  `int.gt(a, b) =:= int.gt(c, d)`. The keyword removes that, and `f` is Core's
-  own `BinaryCmpBaseInt`, so no operator spelling is invented. `Formulas.lean`.
+- **A cross-side term marks its sides at the leaves, and `Rel` leads with a
+  keyword.** Picking the side by *position*, as `l =:= r` does, reaches only a
+  whole operand; it has nothing to say about `[< i <] + [> j >]`, where the two
+  programs meet inside one term. So `BiExp` follows WhyRel and marks the leaves,
+  and `Rel f (l | r)` — the whole-value comparison, which is nearly every use —
+  stays as sugar for `Rel f ([< l <], [> r >])`, wrapped in `Desugar.lean`. Two
+  spellings, one lowering.
+
+  The keyword is what makes the form findable: `int.gt(…)` is also how a `=:=`
+  operand begins, so `int.gt(l, r)` at formula position is ambiguous with the
+  left operand of `int.gt(a, b) =:= int.gt(c, d)`. And every operator slot takes
+  one of Core's own categories, so no operator spelling is invented and the set
+  grows when Core's does. `Formulas.lean`.
 
 - **A relational quantifier's binders are Core bound variables, and that is
   what keeps priming away from them.** Priming renames free variables, so a

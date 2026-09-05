@@ -138,7 +138,7 @@ partial def compose_bicommand (p : StrataDDM.Program)
       let t ← seq s thn
       let e ← seq (keep s t) els
       let s := keep s e
-      let guards := bool_app Core.boolEquivOp [lge, rge]
+      let guards := core_app Core.boolEquivOp [lge, rge]
       return { s with
                out := s.out.push (.assert s!"if_guards_{n}" guards md)
                         |>.push (.ite (.det lge) t.out.toList e.out.toList md) }
@@ -156,14 +156,14 @@ partial def compose_bicommand (p : StrataDDM.Program)
       let c ← seq (keep s b) et
       let d ← seq (keep s c) ee
       let s := keep s d
-      let notl := bool_app Core.boolNotOp [lge]
-      let notr := bool_app Core.boolNotOp [rge]
+      let notl := core_app Core.boolNotOp [lge]
+      let notr := core_app Core.boolNotOp [rge]
       let inner : Core.Statement :=
-        .ite (.det (bool_app Core.boolAndOp [notl, rge])) c.out.toList d.out.toList md
+        .ite (.det (core_app Core.boolAndOp [notl, rge])) c.out.toList d.out.toList md
       let mid : Core.Statement :=
-        .ite (.det (bool_app Core.boolAndOp [lge, notr])) b.out.toList [inner] md
+        .ite (.det (core_app Core.boolAndOp [lge, notr])) b.out.toList [inner] md
       let outer : Core.Statement :=
-        .ite (.det (bool_app Core.boolAndOp [lge, rge])) a.out.toList [mid] md
+        .ite (.det (core_app Core.boolAndOp [lge, rge])) a.out.toList [mid] md
       return { s with out := s.out.push outer }
     | q`RelRL.bi_while, #[lg, rg, la, ra, invs, body] =>
       -- WhyRel's general `Biwhile`, from `compile_biwhile` in translate.ml:
@@ -207,19 +207,19 @@ partial def compose_bicommand (p : StrataDDM.Program)
       let lonly ← project_seq .left p ictx { s with diagnostics := #[] } body
       let ronly ← project_seq .right p ictx { s with diagnostics := #[] } body
       let ronlyStmts := prime_stmts (fragment_names ronly.out.toList) ronly.out.toList
-      let lstep := bool_app Core.boolAndOp [lge, lae]
-      let rstep := bool_app Core.boolAndOp [rge, rae]
-      let align := bool_app Core.boolOrOp
-        [bool_app Core.boolOrOp [lstep, rstep],
-         bool_app Core.boolOrOp
-           [bool_app Core.boolAndOp [lge, rge],
-            bool_app Core.boolAndOp
-              [bool_app Core.boolNotOp [lge], bool_app Core.boolNotOp [rge]]]]
+      let lstep := core_app Core.boolAndOp [lge, lae]
+      let rstep := core_app Core.boolAndOp [rge, rae]
+      let align := core_app Core.boolOrOp
+        [core_app Core.boolOrOp [lstep, rstep],
+         core_app Core.boolOrOp
+           [core_app Core.boolAndOp [lge, rge],
+            core_app Core.boolAndOp
+              [core_app Core.boolNotOp [lge], core_app Core.boolNotOp [rge]]]]
       let inner : Core.Statement :=
         .ite (.det lstep) lonly.out.toList
           [.ite (.det rstep) ronlyStmts lock.out.toList md] md
       let loop : Core.Statement :=
-        .loop (.det (bool_app Core.boolOrOp [lge, rge])) none
+        .loop (.det (core_app Core.boolOrOp [lge, rge])) none
           ((s!"while_{n}_align", align) :: invEs) [inner] md
       return { s with out := s.out.push loop }
     | q`RelRL.bi_while_lockstep, #[lg, rg, invs, body] =>
@@ -236,7 +236,7 @@ partial def compose_bicommand (p : StrataDDM.Program)
       let s := { s with diagnostics := s.diagnostics ++ invDs }
       let b ← seq s body
       let s := keep s b
-      let lockstep := bool_app Core.boolEquivOp [lge, rge]
+      let lockstep := core_app Core.boolEquivOp [lge, rge]
       let loop : Core.Statement :=
         .loop (.det lge) none (invEs ++ [(s!"while_{n}_lockstep", lockstep)])
           b.out.toList md

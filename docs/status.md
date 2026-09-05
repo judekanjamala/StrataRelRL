@@ -53,12 +53,14 @@
   port passes it `inout` instead, which is also what gives each side its own
   copy.
 
-- **A cross-side comparison**, WhyRel's `[< e <] > [> e >]`: `Rel int.gt (l | r)`
-  holds when the left program's `l` exceeds the right program's `r`. The
-  operator is one of Core's own `int.lt`/`int.le`/`int.gt`/`int.ge`, so the
-  surface language invents no spelling for it, and position picks the side
-  exactly as it does in `l =:= r`. `monofact` and `majorization` are what need
-  it.
+- **Cross-side comparison and arithmetic**, WhyRel's `biexp`. `[< e <]` reads
+  the left state and `[> e >]` the right, Core's own int operators combine
+  them — so one term may mix the two, `int.add([< i <], [> j >])` — and
+  `Rel int.gt (l, r)` compares two of them. `Rel int.gt (l | r)` is the
+  whole-value case, where position picks the side as in `l =:= r`; it is sugar
+  for `Rel int.gt ([< l <], [> r >])`. A constant is `[< 1 <]`, a literal
+  reading the same in either state, rather than WhyRel's `[1]`.
+  `monofact` and `majorization` are what need the form.
 
 - **Relational quantifiers**, WhyRel's `Rquant`: `Forall xs | ys :: R` binds one
   list per side, `Forall xs |` and `Forall | ys` one side alone, and
@@ -83,7 +85,7 @@ under `examples/all_all/`.
 | `While e\|e' . do … done` | `While e\|e' do … done` | Lockstep is its own op rather than an empty alignment guard; DDM has no optional-with-separator form |
 | `meth m (n:int\|n:int) : (int\|int)` | `biproc m (n : int, out result : int) \| (n : int, out result : int)` | Each side is a Core `Bindings`, so `out`/`inout` and `translateProcBindings` are reused; the return is a named `out` rather than an implicit `result`, which a translator cannot bind into DDM's elaborator |
 | `\|_ m() _\|` | `\|- Call m (a, out r) \| (b, out s) -\| ;` | The arguments come per side, as the declaration's do; `Call` rather than Core's `call` because after `\|- ` a Core call statement is already a live alternative — `docs/design.md` |
-| `[< e <] > [> e' >]` | `Rel int.gt (e \| e')` | Position picks the side, as in `=:=`, so no value-embedding brackets are needed; the operator is Core's own. Only Core's four int comparisons — `docs/design.md` |
+| `[< e <] > [> e' >]` | `Rel int.gt ([< e <], [> e' >])`, or `Rel int.gt (e \| e')` | Operators are Core's own functions rather than infix; the short form drops the markers where position already picks the side — `docs/design.md`. Int only |
 | `forall xs \| ys . R` | `Forall xs \| ys :: R` | `Forall` capitalized, since a lowercase `forall` also starts a Core expression, which is what a `=:=` operand is; `::` because after a type a `.` reads as the start of a qualified name — `docs/design.md` |
 
 `result` is not a keyword: it is whatever the `out` binding is called. Naming it
@@ -151,13 +153,11 @@ obligation".
 - **Formulas.** `let` (`Rlet`), named relational predicates and coupling
   relations (`Rprimitive`, `named_rformula`), and everything needing a heap:
   region-image agreement (``Agree e`f``), refperm.
-- **Arithmetic across the two sides.** WhyRel's `[< e <]`/`[> e >]` embed a
-  value into a whole `biexp` grammar, so `[< i <] + [1] = [> i >]` is one
-  formula. `Rel` compares a left expression to a right one and stops there:
-  arithmetic goes inside a side's own operand (`Rel int.ge (int.add(i, 1) | i)`),
-  which is what every `all_all` use of the form needs. `Rel` also covers only
-  Core's four *int* comparisons; a `real` or `bv` one would be another entry in
-  `bicmp_op`.
+- **Bi-expressions at a type other than `int`.** `BiExp` and `Rel` take Core's
+  `int` operator categories, so a `real` or `bv` comparison is another category
+  in `Grammar.lean` and another entry in `int_op`. Equality between two
+  bi-expressions is likewise absent: `l =:= r` relates two whole values, which
+  covers WhyRel's `[< e <] = [> e' >]` but not an `=` over a mixed term.
 - **Program structure.** No `interface` / `module` / `bimodule`, no classes,
   objects or regions, no `effects` clauses. Parameters, returns, unary calls and
   synchronized `biproc` calls all exist, so a relational spec is already usable
