@@ -60,6 +60,12 @@
   exactly as it does in `l =:= r`. `monofact` and `majorization` are what need
   it.
 
+- **Relational quantifiers**, WhyRel's `Rquant`: `Forall xs | ys :: R` binds one
+  list per side, `Forall xs |` and `Forall | ys` one side alone, and
+  `Forall xs :: R` one list both readings share. `Exists` likewise. A binder is
+  not program state, so nothing about it is primed — and so `Forall i | i` is
+  refused with a located error, since DDM would resolve every use to the inner
+  binder and leave the outer one unreachable.
 
 ## Differences from WhyRel
 
@@ -78,6 +84,7 @@ under `examples/all_all/`.
 | `meth m (n:int\|n:int) : (int\|int)` | `biproc m (n : int, out result : int) \| (n : int, out result : int)` | Each side is a Core `Bindings`, so `out`/`inout` and `translateProcBindings` are reused; the return is a named `out` rather than an implicit `result`, which a translator cannot bind into DDM's elaborator |
 | `\|_ m() _\|` | `\|- Call m (a, out r) \| (b, out s) -\| ;` | The arguments come per side, as the declaration's do; `Call` rather than Core's `call` because after `\|- ` a Core call statement is already a live alternative — `docs/design.md` |
 | `[< e <] > [> e' >]` | `Rel int.gt (e \| e')` | Position picks the side, as in `=:=`, so no value-embedding brackets are needed; the operator is Core's own. Only Core's four int comparisons — `docs/design.md` |
+| `forall xs \| ys . R` | `Forall xs \| ys :: R` | `Forall` capitalized, since a lowercase `forall` also starts a Core expression, which is what a `=:=` operand is; `::` because after a type a `.` reads as the start of a qualified name — `docs/design.md` |
 
 `result` is not a keyword: it is whatever the `out` binding is called. Naming it
 `result` on both sides recovers WhyRel's spelling, and `Agree result` then means
@@ -141,9 +148,9 @@ obligation".
   fix is upstream: have Core's `translateCoreDecls` return its final
   `TransBindings`, after which the guard can be deleted. Not urgent — the guard
   refuses the combination rather than mistranslating it.
-- **Formulas.** Quantifiers (`Rquant`), `let` (`Rlet`), named relational
-  predicates and coupling relations (`Rprimitive`, `named_rformula`), and
-  everything needing a heap: region-image agreement (``Agree e`f``), refperm.
+- **Formulas.** `let` (`Rlet`), named relational predicates and coupling
+  relations (`Rprimitive`, `named_rformula`), and everything needing a heap:
+  region-image agreement (``Agree e`f``), refperm.
 - **Arithmetic across the two sides.** WhyRel's `[< e <]`/`[> e >]` embed a
   value into a whole `biexp` grammar, so `[< i <] + [1] = [> i >]` is one
   formula. `Rel` compares a left expression to a right one and stops there:

@@ -69,3 +69,12 @@ biproc sum
     /\ Rel int.le (last | int.add(last, 2))
   } ;
 
+  // A quantifier binds one list per side, either side omittable, or one list
+  // both readings share. Nothing bound here is program state, so nothing about
+  // it is primed — which is why `Forall i : int | i : int` is refused.
+  Assert { Forall k : int :: { Both (int.gt(k, 0)) } => Rel int.le (k | k) } ;
+  Assert { Forall k : int | j : int :: { k =:= j } => Rel int.le (k | j) } ;
+  Assert { Exists k : int :: Both (k == s) } ;
+  // One side alone: the binder exists in that program's reading only.
+  Assert { Forall k : int | :: <| int.le(k, int.add(k, s)) <] } ;
+  Assert { Forall | j : int :: [> int.le(j, int.add(j, s)) |> } ;

@@ -96,6 +96,22 @@
   `int.gt(a, b) =:= int.gt(c, d)`. The keyword removes that, and `f` is Core's
   own `BinaryCmpBaseInt`, so no operator spelling is invented. `Formulas.lean`.
 
+- **A relational quantifier's binders are Core bound variables, and that is
+  what keeps priming away from them.** Priming renames free variables, so a
+  bound one passes through untouched — which is right, since a binder is
+  neither program's state and there is nothing for the two sides to disagree
+  about. It also decides the rest of the form: `Forall xs :: R` shares one
+  binder between the two readings and needs no extra machinery, while
+  `Forall xs | ys :: R` gives each side its own.
+
+  The two lists must not share a name. DDM resolves an occurrence to the
+  innermost binder, and it does that before RelRL sees the formula, so
+  `Forall i | i :: i =:= i` would lower to `forall i, i :: i == i` — a
+  tautology, silently weaker than what was written. There is no way to recover
+  the intent afterwards, so it is refused instead: `check_quant_binders` in
+  `State.lean`, run once over each `biproc` in `Program.lean` so a quantifier is
+  reached wherever it sits.
+
 - The one-sided BiWhile steps are this translator's own `project` mode applied to the
   body, which is why that mode is more than a printing aid. `Bicommands.lean`.
 

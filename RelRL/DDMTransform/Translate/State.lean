@@ -9,11 +9,14 @@ module
 public import RelRL.DDMTransform.Translate.Priming
 public import Strata.Languages.Core.Verifier
 public import Strata.Pipeline.Messages
+import StrataDDM.AST
 
 namespace Strata
 namespace RelRL
 
 public section
+
+open StrataDDM (Arg)
 
 /-! # What a biproc body accumulates, and the checks over it
 
@@ -141,6 +144,41 @@ def check_formula (declared : List DeclName) (fr : FileRange)
         if name.endsWith "'" then ("right", name.dropEnd 1) else ("left", name)
       ds.push <| Message.withRange fr
         s!"`{source}` is not a variable of the {side} program" .userError
+
+/-- The names a `DeclList` binds, in source order. -/
+partial def decl_list_names (a : Arg) : List String :=
+  match a with
+  | .op op =>
+    match op.name, op.args with
+    | q`Core.declAtom, #[b] => decl_list_names b
+    | q`Core.declPush, #[dl, b] => decl_list_names dl ++ decl_list_names b
+    | q`Core.bind_mk, #[.ident _ v, _, _] => [v]
+    | _, _ => []
+  | _ => []
+
+/-- Refuse a relational quantifier binding one name on both sides. DDM resolves
+every occurrence to the inner binder, so the outer one is unreachable and the
+formula quietly says less than it reads as — `Forall i | i :: i =:= i` lowers to
+`forall i, i :: i == i`, which is a tautology. Walked over the whole `biproc`,
+so a quantifier in a spec, an invariant, an `Assert` or an alignment guard is
+reached the same way. -/
+partial def check_quant_binders (file : String) (a : Arg) : Array Message :=
+  let below (args : Array Arg) : Array Message :=
+    args.foldl (fun ds x => ds ++ check_quant_binders file x) #[]
+  match a with
+  | .op op =>
+    match op.name, op.args with
+    | q`RelRL.biq_both, #[l, r] =>
+      let ls := decl_list_names l
+      ((decl_list_names r).filter (ls.contains ·)).foldl (init := below op.args) fun ds n =>
+        ds.push <| Message.withRange { file := .file file, range := op.ann }
+          s!"a relational quantifier binds `{n}` on both sides: every use resolves \
+             to the right one, so the left binder is unreachable. Give them \
+             different names, or bind one list both sides share." .userError
+    | _, _ => below op.args
+  | .seq _ _ as => below as
+  | .option _ (some b) => check_quant_binders file b
+  | _ => #[]
 
 /-- Emit one bicommand: the left program's statements, then the right's, as
 WhyRel's `Bisplit` does. Per bicommand, never per side — CLAUDE.md, "Emission

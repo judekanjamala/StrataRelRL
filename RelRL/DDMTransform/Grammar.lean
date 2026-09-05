@@ -53,6 +53,27 @@ op rf_iff (l : RFormula, r : RFormula) : RFormula => @[prec(4)] l " <=> " r;
 op rf_bicmp (f : BinaryCmpBaseInt, l : int, r : int) : RFormula =>
   "Rel " f " (" l " | " r ")";
 
+// WhyRel's `Rquant`: a binder list per side, either side omittable, or one
+// list both readings share. Nothing here is program state, so nothing is
+// primed — and that is why `l | r` needs the two sides' names to differ.
+category BiQuantBindings;
+@[scope(r)]
+op biq_both (l : DeclList, @[scope(l)] r : DeclList) : BiQuantBindings => l " | " r;
+@[scope(l)]
+op biq_left (l : DeclList) : BiQuantBindings => l " |";
+@[scope(r)]
+op biq_right (r : DeclList) : BiQuantBindings => "| " r;
+@[scope(x)]
+op biq_shared (x : DeclList) : BiQuantBindings => x;
+
+// `::` rather than WhyRel's `.`: after a type, a `.` is read as the start of a
+// qualified name (`int.add`), so `int . R` fails with `expected identifier`.
+// It is also what Core's own `forall d :: b` uses — docs/status.md.
+op rf_forall (xs : BiQuantBindings, @[scope(xs)] b : RFormula) : RFormula =>
+  @[prec(3)] "Forall " xs " :: " b;
+op rf_exists (xs : BiQuantBindings, @[scope(xs)] b : RFormula) : RFormula =>
+  @[prec(3)] "Exists " xs " :: " b;
+
 // ---- Bicommands -------------------------------------------------------
 // Bicommand is deliberately NOT a `Command` — docs/design.md.
 

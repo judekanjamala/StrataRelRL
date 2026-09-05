@@ -176,6 +176,14 @@ def translate_program_with (mode : Mode) (p : StrataDDM.Program)
          references to top-level declarations inside the biproc would silently \
          resolve to the wrong one. docs/issues.md has the mechanism."
       .userError
+  -- Syntactic, so one pass over the tree reaches a quantifier wherever it sits —
+  -- spec, invariant, `Assert` or alignment guard. `State.lean` says what it
+  -- refuses and why the clash cannot be left to lowering.
+  for op in p.commands do
+    if op.name == q`RelRL.biproc then
+      for d in op.args.foldl
+          (fun ds a => ds ++ check_quant_binders ictx.fileName a) (#[] : Array Message) do
+        emit_diagnostic d
   let mut procs : List (List Core.Decl) := []
   for op in p.commands do
     if misaligning.isEmpty && op.name == q`RelRL.biproc then
