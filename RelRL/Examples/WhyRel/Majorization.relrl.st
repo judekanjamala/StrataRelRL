@@ -8,7 +8,7 @@ program RelRL;
 biproc m (x : int, out result : int) | (x : int, out result : int)
   requires { Agree x }
   requires { Both (int.ge(x, 4)) }
-  ensures { Rel int.gt (result | result) }
+  ensures { Let a = [< result <], b = [> result >] :: <| int.gt(a, b) <] }
 =
   Var y : int | y : int ;
   Var z : int | z : int ;
@@ -20,7 +20,8 @@ biproc m (x : int, out result : int) | (x : int, out result : int)
     <| int.mod(w, 2) != 0 <] | [> int.mod(w, 3) != 0 |> do
     invariant { Agree y }
     invariant { Both (int.ge(y, 4)) }
-    invariant { [> int.gt(z, 0) |> /\ Rel int.gt (z | z) }
+    invariant { [> int.gt(z, 0) |>
+                /\ { Let a = [< z <], b = [> z >] :: <| int.gt(a, b) <] } }
     // Reached only when neither side may step alone, so both guards hold and
     // `If`'s agreement obligation is discharged by the alignment guards.
     If int.mod(w, 2) == 0 | int.mod(w, 3) == 0 then

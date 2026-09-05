@@ -54,23 +54,15 @@
   copy.
 
 - **`Let`**, WhyRel's `Rlet`: `Let x = [< e <], y = [> e' >] :: R` names a value
-  from either program and says what it likes about the names. This is what puts
-  *every* Core expression across the two programs — `bool`, `real`, `Map`,
-  `Sequence`, a user `function`, any type at all — since the body is an ordinary
-  relational formula and the names are Core bound variables, which nothing
-  primes. A binding may also read what an earlier one declared, from either
-  side. `BiExp` below stays the `int` shorthand rather than growing a copy of
-  Core's operator grammar; `docs/design.md` argues why that split.
-
-- **Cross-side comparison and arithmetic**, WhyRel's `biexp`. `[< e <]` reads
-  the left state and `[> e >]` the right, Core's own int operators combine
-  them — so one term may mix the two, `int.add([< i <], [> j >])` — and
-  `Rel int.gt (l, r)` compares two of them. `Rel int.gt (l | r)` is the
-  whole-value case, where position picks the side as in `l =:= r`; it is sugar
-  for `Rel int.gt ([< l <], [> r >])`. A constant is `[< 1 <]`, a literal
-  reading the same in either state, rather than WhyRel's `[1]`.
-  `monofact` and `majorization` are what need the form.
-
+  from either program and says what it likes about the names. This is the *only*
+  form that reaches across the two programs at an arbitrary type, and the only
+  one that says more than `=:=` — an inequality, or arithmetic mixing the sides.
+  Every Core expression is in reach, `bool`, `real`, `Map`, `Sequence` and a
+  user `function` alike, because the body is an ordinary relational formula and
+  the names are Core bound variables, which nothing primes. A binding may also
+  read what an earlier one declared, from either side. `monofact` and
+  `majorization` are what need it; `docs/design.md` records the two narrower
+  forms that came before it and why they went.
 - **Relational quantifiers**, WhyRel's `Rquant`: `Forall xs | ys :: R` binds one
   list per side, `Forall xs |` and `Forall | ys` one side alone, and
   `Forall xs :: R` one list both readings share. `Exists` likewise. A binder is
@@ -94,7 +86,7 @@ under `examples/all_all/`.
 | `While e\|e' . do … done` | `While e\|e' do … done` | Lockstep is its own op rather than an empty alignment guard; DDM has no optional-with-separator form |
 | `meth m (n:int\|n:int) : (int\|int)` | `biproc m (n : int, out result : int) \| (n : int, out result : int)` | Each side is a Core `Bindings`, so `out`/`inout` and `translateProcBindings` are reused; the return is a named `out` rather than an implicit `result`, which a translator cannot bind into DDM's elaborator |
 | `\|_ m() _\|` | `\|- Call m (a, out r) \| (b, out s) -\| ;` | The arguments come per side, as the declaration's do; `Call` rather than Core's `call` because after `\|- ` a Core call statement is already a live alternative — `docs/design.md` |
-| `[< e <] > [> e' >]` | `Rel int.gt ([< e <], [> e' >])`, or `Rel int.gt (e \| e')` | Operators are Core's own functions rather than infix; the short form drops the markers where position already picks the side — `docs/design.md`. Int only |
+| `[< e <] > [> e' >]` | `Let a = [< e <], b = [> e' >] :: <\| int.gt(a, b) <]` | No `biexp` grammar: naming each side and comparing the names covers every type instead of `int` alone — `docs/design.md` |
 | `let x \| y = ex \| ey in R` | `Let x = [< ex <], y = [> ey >] :: R` | Each binding carries its own side marker rather than the sides being split into two groups, so the list is n-ary and a one-sided `let` is just a one-element list |
 | `forall xs \| ys . R` | `Forall xs \| ys :: R` | `Forall` capitalized, since a lowercase `forall` also starts a Core expression, which is what a `=:=` operand is; `::` because after a type a `.` reads as the start of a qualified name — `docs/design.md` |
 
@@ -163,17 +155,6 @@ obligation".
 - **Formulas.** Named relational predicates and coupling relations
   (`Rprimitive`, `named_rformula`), and everything needing a heap: region-image
   agreement (``Agree e`f``), refperm.
-- **`BiExp` at a type other than `int`.** Every `BiExp` slot is `int`: the
-  leaves, the operators (Core's `int` categories), and `Rel`'s comparison. Each
-  violation is a located error rather than a silent mistranslation — a `bool`
-  leaf is refused by DDM's own typechecker, a `bool` operator by the parser.
-
-  This is a gap in the *shorthand*, not in what can be said: `Let` above reaches
-  every type, so `Rel int.le ([< a <], [> b >])` is the terse form of something
-  `Let a' = [< a <], b' = [> b >] :: <| int.le(a', b') <]` can always express.
-  Widening `BiExp` is a matter of another operator category in `Grammar.lean`
-  and another entry in `int_op`, if the shorthand is ever wanted at `real` or
-  `bv`.
 - **Program structure.** No `interface` / `module` / `bimodule`, no classes,
   objects or regions, no `effects` clauses. Parameters, returns, unary calls and
   synchronized `biproc` calls all exist, so a relational spec is already usable

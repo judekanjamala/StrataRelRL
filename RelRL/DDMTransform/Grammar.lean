@@ -47,30 +47,10 @@ op rf_or (l : RFormula, r : RFormula) : RFormula => @[prec(8), leftassoc] l " \\
 op rf_implies (l : RFormula, r : RFormula) : RFormula => @[prec(5), rightassoc] l " => " r;
 op rf_iff (l : RFormula, r : RFormula) : RFormula => @[prec(4)] l " <=> " r;
 
-// WhyRel's `biexp`: arithmetic over values of *both* programs, so one term can
-// mix them — `int.add([< i <], [> j >])`. Position cannot pick the side once
-// arithmetic nests, which is what the `[< … <]`/`[> … >]` markers are for.
-// Operators are Core's own; a constant is `[< 1 <]`, a literal reading the same
-// in either state.
-category BiExp;
-op be_left (e : int) : BiExp => "[< " e " <]";
-op be_right (e : int) : BiExp => "[> " e " >]";
-op be_arith (f : BinaryArithBasicInt, l : BiExp, r : BiExp) : BiExp =>
-  f " (" l ", " r ")";
-op be_divmod (f : BinaryArithDivModInt, l : BiExp, r : BiExp) : BiExp =>
-  f " (" l ", " r ")";
-op be_neg (f : UnaryArithInt, e : BiExp) : BiExp => f " (" e ")";
-
-// WhyRel's `[< e <] > [> e' >]`. The leading `Rel` keeps an operand's own
-// `int.gt(…)` from starting one — docs/design.md.
-op rf_bicmp_exp (f : BinaryCmpBaseInt, l : BiExp, r : BiExp) : RFormula =>
-  "Rel " f " (" l ", " r ")";
-
 // WhyRel's `Rlet`: name a value from either program, then say what you like
-// about the names. The body is an ordinary relational formula, so *all* of
-// Core's expression language reaches across the two programs through it —
-// `BiExp` above stays the int shorthand rather than growing a copy of Core's
-// operator grammar. docs/design.md.
+// about the names. `[< e <]` reads the left state and `[> e >]` the right, and
+// the body is an ordinary relational formula — so this one form is how *all* of
+// Core's expression language reaches across the two programs. docs/design.md.
 category BiLetBind;
 @[declare(x, tp)]
 op bilet_left (tp : Type, x : Ident, e : tp) : BiLetBind => x " = [< " e " <]";
@@ -86,12 +66,6 @@ op biletPush (bs : BiLetBinds, @[scope(bs)] b : BiLetBind) : BiLetBinds =>
 
 op rf_let (bs : BiLetBinds, @[scope(bs)] b : RFormula) : RFormula =>
   @[prec(3)] "Let " bs " :: " b;
-
-// The whole-value comparison, where position picks the side as it does in
-// `=:=`. Sugar: `Desugar.lean` wraps each operand and hands it to the form
-// above.
-op rf_bicmp (f : BinaryCmpBaseInt, l : int, r : int) : RFormula =>
-  "Rel " f " (" l " | " r ")";
 
 // WhyRel's `Rquant`: a binder list per side, either side omittable, or one
 // list both readings share. Nothing here is program state, so nothing is

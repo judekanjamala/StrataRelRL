@@ -30,48 +30,6 @@ def core_app (op : Core.Expression.Expr) (args : List Core.Expression.Expr) :
     Core.Expression.Expr :=
   Lambda.LExpr.mkApp () op args
 
-/-- The Core operator one of Core's own int-operator categories names. `Rel`
-and `BiExp` take those categories directly, so the surface language invents no
-operator spelling and gains one the moment Core does. -/
-def int_op (arg : Arg) : TransM Core.Expression.Expr := do
-  match arg with
-  | .op op =>
-    match op.name with
-    | q`Core.int_lt => return Core.intLtOp
-    | q`Core.int_le => return Core.intLeOp
-    | q`Core.int_gt => return Core.intGtOp
-    | q`Core.int_ge => return Core.intGeOp
-    | q`Core.int_add => return Core.intAddOp
-    | q`Core.int_sub => return Core.intSubOp
-    | q`Core.int_mul => return Core.intMulOp
-    | q`Core.int_div => return Core.intDivOp
-    | q`Core.int_mod => return Core.intModOp
-    | q`Core.int_neg => return Core.intNegOp
-    | n => TransM.error s!"no Core operator for {n.fullName}"
-  | _ => TransM.error "an operator slot is not an operation"
-
-/-- A bi-expression. `[< e <]` reads the left state and `[> e >]` the right,
-which is the primed reading as everywhere else; the arithmetic above them is
-what lets one term mix the two. -/
-partial def lower_biexp (p : StrataDDM.Program) (bindings : TransBindings)
-    (arg : Arg) : TransM Core.Expression.Expr := do
-  match arg with
-  | .op op =>
-    match op.name, op.args with
-    | q`RelRL.be_left, #[e] => translateExpr p bindings e
-    | q`RelRL.be_right, #[e] =>
-      let e ← translateExpr p bindings e
-      return prime_expr (expr_names e) e
-    | q`RelRL.be_arith, #[f, l, r]
-    | q`RelRL.be_divmod, #[f, l, r] =>
-      return core_app (← int_op f)
-        [← lower_biexp p bindings l, ← lower_biexp p bindings r]
-    | q`RelRL.be_neg, #[f, e] =>
-      return core_app (← int_op f) [← lower_biexp p bindings e]
-    | n, args =>
-      TransM.error s!"unexpected bi-expression {n.fullName} with {args.size} arguments"
-  | _ => TransM.error "bi-expression is not an operation"
-
 /-- A relational quantifier's binders, the left list first — the order
 `Grammar.lean`'s `@[scope]` chain puts them in, and so the Core binder order.
 A shared list is one binder both readings see. -/
@@ -122,9 +80,6 @@ partial def lower_rformula (p : StrataDDM.Program) (bindings : TransBindings)
       let l ← translateExpr p bindings l
       let r ← translateExpr p bindings r
       return .eq () l (prime_expr (expr_names r) r)
-    | q`RelRL.rf_bicmp_exp, #[f, l, r] =>
-      return core_app (← int_op f)
-        [← lower_biexp p bindings l, ← lower_biexp p bindings r]
     | q`RelRL.rf_let, #[bs, b] => lower_bilet p bindings bs b
     | q`RelRL.rf_forall, #[xs, b] => lower_quant .all p bindings xs b
     | q`RelRL.rf_exists, #[xs, b] => lower_quant .exist p bindings xs b
@@ -155,7 +110,7 @@ and the body under all of them.
 This is where every Core expression reaches across the two programs: the names
 are Core bound variables, so nothing primes them and the body may combine values
 from the two sides at any type, with Core's own operators. `docs/design.md` on
-why that is the general mechanism rather than a `BiExp` copy of Core's grammar. -/
+why this is the only such form. -/
 partial def lower_bilet (p : StrataDDM.Program) (bindings : TransBindings)
     (bsa ba : Arg) : TransM Core.Expression.Expr := do
   let items ← bi_let_binds bsa

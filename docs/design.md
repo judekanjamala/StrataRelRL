@@ -86,45 +86,40 @@
   the message still says which program. `Formulas.lean` has no `Agree` case at
   all.
 
-- **A cross-side term marks its sides at the leaves, and `Rel` leads with a
-  keyword.** Picking the side by *position*, as `l =:= r` does, reaches only a
-  whole operand; it has nothing to say about `[< i <] + [> j >]`, where the two
-  programs meet inside one term. So `BiExp` follows WhyRel and marks the leaves,
-  and `Rel f (l | r)` — the whole-value comparison, which is nearly every use —
-  stays as sugar for `Rel f ([< l <], [> r >])`, wrapped in `Desugar.lean`. Two
-  spellings, one lowering.
+- **One form reaches across the two programs, and it is `Let`.** A formula that
+  relates the two states needs some way to name a value from each. Three were
+  tried in turn, and the first two were removed:
 
-  What `BiExp` deliberately does *not* do is grow into a copy of Core's
-  expression grammar. "Any Core expression across the two programs" would mean
-  mirroring some sixty operator forms — every `bv` width, `Map`, `Sequence`,
-  `str`, `re` — and that is the reuse of `Core.getProgram` this design rests on,
-  spent. `Let` buys the same reach for three ops: name a value from either side,
-  and the body is an ordinary formula in which those names are Core *bound*
-  variables, so Core's own expression language combines them at any type with
-  nothing primed. `BiExp` stays what it is worth being — the terse `int`
-  comparison, which is nearly every use.
+  `Rel int.gt (l | r)` compared a left expression to a right one, picking the
+  side by *position*, as `l =:= r` does. It reads well and covers nearly every
+  use, but position reaches only a whole operand — it has nothing to say about
+  `[< i <] + [> j >]`, where the two programs meet inside one term. So `BiExp`
+  was added under it, marking the sides at the leaves the way WhyRel does, with
+  Core's `int` operators above them.
 
-  The keyword is what makes the form findable: `int.gt(…)` is also how a `=:=`
-  operand begins, so `int.gt(l, r)` at formula position is ambiguous with the
-  left operand of `int.gt(a, b) =:= int.gt(c, d)`. And every operator slot takes
-  one of Core's own categories, so no operator spelling is invented and the set
-  grows when Core's does. `Formulas.lean`.
+  Both are gone. `BiExp` could only ever be an `int` shorthand: making it reach
+  every Core expression means mirroring some sixty operator forms — every `bv`
+  width, `Map`, `Sequence`, `str`, `re` — and that is the reuse of
+  `Core.getProgram` this design rests on, spent. `Let` needs three ops and has
+  no such ceiling: name a value from either side, and the body is an ordinary
+  formula in which those names are Core *bound* variables, so Core's own
+  expression language combines them at any type with nothing primed. Anything
+  `Rel` could say, `Let` says:
 
-- **A relational quantifier's binders are Core bound variables, and that is
-  what keeps priming away from them.** Priming renames free variables, so a
-  bound one passes through untouched — which is right, since a binder is
-  neither program's state and there is nothing for the two sides to disagree
-  about. It also decides the rest of the form: `Forall xs :: R` shares one
-  binder between the two readings and needs no extra machinery, while
-  `Forall xs | ys :: R` gives each side its own.
+  ```
+  Rel int.gt (l | r)  ≡  Let a = [< l <], b = [> r >] :: <| int.gt(a, b) <]
+  ```
 
-  The two lists must not share a name. DDM resolves an occurrence to the
-  innermost binder, and it does that before RelRL sees the formula, so
-  `Forall i | i :: i =:= i` would lower to `forall i, i :: i == i` — a
-  tautology, silently weaker than what was written. There is no way to recover
-  the intent afterwards, so it is refused instead: `check_quant_binders` in
-  `State.lean`, run once over each `biproc` in `Program.lean` so a quantifier is
-  reached wherever it sits.
+  Keeping the shorthand as sugar over `Let` was the alternative. It was dropped
+  because two spellings for one idea is the cost, and the terser one is also the
+  one that misleads: it looks like the general form and is not, which is exactly
+  how `BiExp` came to be bolted underneath it.
+
+  A note on reading the body. `<| e <]` there says "in the left state", and when
+  every name in `e` is `Let`-bound that carries no information — the formula
+  holds in one state iff it holds in the other. The marker is not noise, though:
+  it is what fixes the reading of any *free* program variable still in `e`, and
+  `[> e |>` is available for the other one.
 
 - The one-sided BiWhile steps are this translator's own `project` mode applied to the
   body, which is why that mode is more than a printing aid. `Bicommands.lean`.

@@ -52,14 +52,6 @@ partial def desugar_arg (a : Arg) : Arg :=
     | q`RelRL.bi_if_then, #[lg, rg, thn] =>
       .op { ann := op.ann, name := q`RelRL.bi_if,
             args := #[lg, rg, thn, .seq op.ann .newline #[]] }
-    -- `Rel f (l | r)` is `Rel f ([< l <], [> r >])`: position picks the side, as
-    -- it does in `=:=`, which is what the general form's markers spell out.
-    -- Each operand is wrapped where it stands, at the same depth.
-    | q`RelRL.rf_bicmp, #[f, l, r] =>
-      .op { ann := op.ann, name := q`RelRL.rf_bicmp_exp,
-            args := #[f,
-                      .op { ann := l.ann, name := q`RelRL.be_left, args := #[l] },
-                      .op { ann := r.ann, name := q`RelRL.be_right, args := #[r] }] }
     -- `Agree x` is `x =:= x` by definition: one expression, read in each
     -- state. The operand is copied into two positions at the same depth,
     -- neither of which binds.

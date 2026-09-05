@@ -62,27 +62,20 @@ biproc sum
     // expression.
     /\ { ~ Agree last => { Agree s \/ [> s == 0 |> } }
     /\ { Agree s <=> Both (s == 6) }
-    // `Rel f (l | r)` — any of Core's int comparisons between a left value and
-    // a right one. WhyRel writes it `[< e <] > [> e >]`; here, as in `=:=`,
-    // position picks the side.
-    /\ Rel int.gt (int.add(s, 1) | s)
-    /\ Rel int.le (last | int.add(last, 2))
-    // The same, spelled out: `[< e <]` reads the left state and `[> e >]` the
-    // right, and the short form above is sugar for exactly this.
-    /\ Rel int.gt ([< int.add(s, 1) <], [> s >])
-    // Which is what buys arithmetic *across* the two — a term position cannot
-    // reach into. WhyRel's `[< e <] + [1] > [> e >]`.
-    /\ Rel int.gt (int.add ([< last <], [> last >]), [< 3 <])
   } ;
 
-  // `Let` names a value from either program; the body is an ordinary formula
-  // over those names, so any Core expression, at any type, can combine the two.
-  // The names are bound variables, which is why nothing primes them.
+  // `Let` names a value from either program — `[< e <]` reads the left state,
+  // `[> e >]` the right — and the body is an ordinary formula over those names.
+  // It is the one form that reaches across the two programs at an arbitrary
+  // type, and the only one that says more than `=:=`. The names are bound
+  // variables, which is why nothing primes them.
   Assert { Let x = [< s <], y = [> s >] :: <| x == y <] } ;
-  // A type `Rel` cannot reach: the comparison there is `int`, and this is not.
+  // An inequality between the two, which `=:=` cannot state.
+  Assert { Let x = [< int.add(s, 1) <], y = [> s >] :: <| int.gt(x, y) <] } ;
+  // Any Core type, not only the comparable ones.
   Assert { Let p = [< s == 6 <], q = [> s == 6 >] :: <| p && q <] } ;
-  // `last` is 3 on the left and 1 on the right, so a binding from each side
-  // combines into a value neither program holds.
+  // `last` is 3 on the left and 1 on the right, so arithmetic over the two
+  // bindings reaches a value neither program holds.
   Assert { Let a = [< last <], b = [> last >] :: <| int.add(a, b) == 4 <] } ;
   // A binding may read what an earlier one declared, from the other side:
   // `b` is the right program's `last` plus the left program's.
@@ -91,8 +84,8 @@ biproc sum
   // A quantifier binds one list per side, either side omittable, or one list
   // both readings share. Nothing bound here is program state, so nothing about
   // it is primed — which is why `Forall i : int | i : int` is refused.
-  Assert { Forall k : int :: { Both (int.gt(k, 0)) } => Rel int.le (k | k) } ;
-  Assert { Forall k : int | j : int :: { k =:= j } => Rel int.le (k | j) } ;
+  Assert { Forall k : int :: { Both (int.gt(k, 0)) } => Both (int.le(k, k)) } ;
+  Assert { Forall k : int | j : int :: { k =:= j } => { j =:= k } } ;
   Assert { Exists k : int :: Both (k == s) } ;
   // One side alone: the binder exists in that program's reading only.
   Assert { Forall k : int | :: <| int.le(k, int.add(k, s)) <] } ;
